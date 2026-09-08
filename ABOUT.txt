@@ -1,0 +1,14 @@
+========================================================================
+                       PROJECT INFORMATION CARD
+========================================================================
+Project Name : JA Remote - TE PC Manager
+Tech Stack   : Flutter / Dart / Provider / Windows Desktop (C++ Runner)
+Version      : 1.1.0+2
+Managed By   : JA Auto Git
+Author       : Johnny / JA-Tech System
+Website      : https://jatechvn.github.io/
+Repository   : https://github.com/jatechvn/JA_Remote
+License      : MIT
+------------------------------------------------------------------------
+Description  : LAN TE PC remote manager: Wake-on-LAN (WOL), auto ping status monitoring, batch PowerShell / WinRM / SSH command execution, and audit logging.
+========================================================================

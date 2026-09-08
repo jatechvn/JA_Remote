@@ -1,0 +1,6 @@
+@echo off
+title Running JA Mini Showcase...
+cd /d %~dp0
+echo Starting JA Mini Showcase on Windows Desktop...
+flutter run -d windows
+pause
