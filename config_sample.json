@@ -1,0 +1,77 @@
+{
+  "app": "JA_Remote",
+  "version": "1.1.0",
+  "exportedAt": "2026-09-08T08:15:00.000Z",
+  "deviceCount": 5,
+  "devices": [
+    {
+      "id": "te-cmdl04",
+      "name": "CMDL04",
+      "hostname": "CMDL04.corp.local",
+      "ip": "172.21.174.208",
+      "mac": "A4:B1:C1:22:33:44",
+      "os": "Windows",
+      "online": true,
+      "username": "Administrator",
+      "group": "Factory",
+      "note": "Main TE Calibration and Testing Station"
+    },
+    {
+      "id": "te-pc01",
+      "name": "L6-TE01",
+      "hostname": "L6-TE01.factory.local",
+      "ip": "172.19.116.157",
+      "mac": "A4:B1:C1:11:22:33",
+      "os": "Windows",
+      "online": false,
+      "username": "Administrator",
+      "group": "L6",
+      "note": "Main TE Functional Testbed Station #1"
+    },
+    {
+      "id": "te-pc02",
+      "name": "L6-TE02",
+      "hostname": "L6-TE02.factory.local",
+      "ip": "172.19.116.158",
+      "mac": "A4:B1:C1:11:22:34",
+      "os": "Windows",
+      "online": false,
+      "username": "Administrator",
+      "group": "L6",
+      "note": "RF Calibration Rig Line 6"
+    },
+    {
+      "id": "te-pc03",
+      "name": "L10-TE01",
+      "hostname": "L10-TE01.factory.local",
+      "ip": "172.19.116.159",
+      "mac": "B8:27:EB:AA:BB:CC",
+      "os": "Windows",
+      "online": false,
+      "username": "Administrator",
+      "group": "L10",
+      "note": "Line 10 Audio & Vision Inspection Station"
+    },
+    {
+      "id": "te-office01",
+      "name": "OFFICE-SRV",
+      "hostname": "OFFICE-SRV.corp.local",
+      "ip": "192.168.100.66",
+      "mac": "00:15:5D:12:34:56",
+      "os": "Windows",
+      "online": true,
+      "username": "Administrator",
+      "group": "Office",
+      "note": "Local Office Dispatch Server"
+    }
+  ],
+  "credentials": [
+    {
+      "id": "cred_default_admin",
+      "username": "Administrator",
+      "password": "",
+      "label": "Tài khoản Administrator mặc định",
+      "lastUsed": "2026-09-08T08:00:00.000Z"
+    }
+  ]
+}
