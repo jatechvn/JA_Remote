@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:dartssh2/dartssh2.dart';
 import '../core/process/process_runner.dart';
 import '../data/models/managed_device.dart';
@@ -25,6 +26,31 @@ class RemoteCommandResult {
 /// Service managing execution of PowerShell and SSH commands across network PCs.
 class RemoteCommandService {
   final LogRepository _logRepo = LogRepository();
+  final Future<SSHClient> Function(ManagedDevice, String, String, Duration)
+  _connectSsh;
+
+  RemoteCommandService({
+    Future<SSHClient> Function(ManagedDevice, String, String, Duration)?
+    connectSsh,
+  }) : _connectSsh = connectSsh ?? _openSsh;
+
+  static Future<SSHClient> _openSsh(
+    ManagedDevice device,
+    String username,
+    String password,
+    Duration timeout,
+  ) async {
+    final socket = await SSHSocket.connect(
+      device.ip,
+      device.sshPort,
+      timeout: timeout,
+    );
+    return SSHClient(
+      socket,
+      username: username,
+      onPasswordRequest: () => password,
+    );
+  }
 
   /// Executes a command on a single device (auto selects PowerShell or SSH based on device.os or override).
   Future<RemoteCommandResult> execute({
@@ -35,6 +61,13 @@ class RemoteCommandService {
     String? password,
     int timeoutSeconds = 15,
   }) async {
+    if (timeoutSeconds < 1) {
+      throw ArgumentError.value(
+        timeoutSeconds,
+        'timeoutSeconds',
+        'Must be positive',
+      );
+    }
     final sw = Stopwatch()..start();
     final type =
         typeOverride ??
@@ -133,28 +166,44 @@ class RemoteCommandService {
     required int timeoutSeconds,
     required Stopwatch sw,
   }) async {
+    SSHClient? client;
+    var finished = false;
+    final timeout = Duration(seconds: timeoutSeconds);
     try {
-      final socket = await SSHSocket.connect(
-        device.ip,
-        device.sshPort,
-        timeout: Duration(seconds: timeoutSeconds),
-      );
-
-      final client = SSHClient(
-        socket,
-        username: username,
-        onPasswordRequest: () => password,
-      );
-
-      final session = await client.execute(command);
-      final stdout = await utf8.decodeStream(session.stdout);
-      final stderr = await utf8.decodeStream(session.stderr);
-
-      client.close();
-      await client.done;
+      final result = await (() async {
+        final connected = await _connectSsh(
+          device,
+          username,
+          password,
+          timeout,
+        );
+        if (finished) {
+          connected.close();
+          throw TimeoutException(
+            'SSH connection completed after deadline',
+            timeout,
+          );
+        }
+        client = connected;
+        final session = await connected.execute(command);
+        // Drain both channels concurrently, and wait for exit metadata.
+        final output = await Future.wait<String>([
+          utf8.decodeStream(session.stdout),
+          utf8.decodeStream(session.stderr),
+          session.done.then((_) => ''),
+        ]);
+        return (
+          output: output[0],
+          error: output[1],
+          code: session.exitCode,
+          signaled: session.exitSignal != null,
+        );
+      })().timeout(timeout);
       sw.stop();
-
-      final ok = stderr.isEmpty;
+      final ok = result.code == 0 && !result.signaled;
+      final stderr = !ok && result.error.isEmpty
+          ? 'SSH command failed (exit code: ${result.code ?? 'unavailable'}).'
+          : result.error;
       _logRepo.addLog(
         deviceName: device.name,
         deviceIp: device.ip,
@@ -166,7 +215,7 @@ class RemoteCommandService {
       return RemoteCommandResult(
         device: device,
         isSuccess: ok,
-        output: stdout,
+        output: result.output,
         error: stderr,
         durationMs: sw.elapsedMilliseconds,
       );
@@ -186,57 +235,79 @@ class RemoteCommandService {
         error: 'SSH Error: $e',
         durationMs: sw.elapsedMilliseconds,
       );
+    } finally {
+      finished = true;
+      client?.close();
+      sw.stop();
     }
   }
 
   /// Batch executes a command across multiple devices with controlled concurrency.
+  /// Automatically runs high-concurrency multi-workers when >= 10 devices.
   Future<List<RemoteCommandResult>> executeBatch({
     required List<ManagedDevice> devices,
     required String command,
     String? typeOverride,
     String? username,
     String? password,
-    int maxConcurrent = 5,
+    int? maxConcurrent,
     Function(int completed, int total, RemoteCommandResult result)? onProgress,
   }) async {
-    final List<RemoteCommandResult> results = [];
-    final queue = List<ManagedDevice>.from(devices);
-    final total = devices.length;
-    int completed = 0;
+    if (maxConcurrent != null && maxConcurrent < 1) {
+      throw ArgumentError.value(
+        maxConcurrent,
+        'maxConcurrent',
+        'Must be positive',
+      );
+    }
+    final targets = List<ManagedDevice>.of(devices);
+    final total = targets.length;
+    if (total == 0) return [];
+    final concurrency = math.min(
+      maxConcurrent ?? (total >= 10 ? 30 : total),
+      total,
+    );
+    final results = <RemoteCommandResult>[];
+    var next = 0;
+    Object? progressError;
+    StackTrace? progressStack;
 
-    final completer = Completer<List<RemoteCommandResult>>();
-    int active = 0;
-
-    void processNext() {
-      if (queue.isEmpty && active == 0) {
-        if (!completer.isCompleted) completer.complete(results);
-        return;
-      }
-
-      while (active < maxConcurrent && queue.isNotEmpty) {
-        final dev = queue.removeAt(0);
-        active++;
-
-        execute(
-              device: dev,
-              command: command,
-              typeOverride: typeOverride,
-              username: username,
-              password: password,
-            )
-            .then((res) {
-              results.add(res);
-              completed++;
-              onProgress?.call(completed, total, res);
-            })
-            .whenComplete(() {
-              active--;
-              processNext();
-            });
+    Future<void> worker() async {
+      while (next < total) {
+        final device = targets[next++];
+        final watch = Stopwatch()..start();
+        RemoteCommandResult result;
+        try {
+          result = await execute(
+            device: device,
+            command: command,
+            typeOverride: typeOverride,
+            username: username,
+            password: password,
+          );
+        } catch (error) {
+          result = RemoteCommandResult(
+            device: device,
+            isSuccess: false,
+            output: '',
+            error: 'Command execution failed: $error',
+            durationMs: watch.elapsedMilliseconds,
+          );
+        }
+        results.add(result);
+        try {
+          onProgress?.call(results.length, total, result);
+        } catch (error, stack) {
+          progressError ??= error;
+          progressStack ??= stack;
+        }
       }
     }
 
-    processNext();
-    return completer.future;
+    await Future.wait(List.generate(concurrency, (_) => worker()));
+    if (progressError != null) {
+      Error.throwWithStackTrace(progressError!, progressStack!);
+    }
+    return results;
   }
 }

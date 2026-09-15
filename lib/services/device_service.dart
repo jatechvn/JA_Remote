@@ -18,6 +18,8 @@ class DeviceService extends ChangeNotifier {
   String _searchQuery = '';
   String _selectedGroup = 'All';
   String _statusFilter = 'All'; // 'All', 'Online', 'Offline'
+  String _sortColumn = 'ip'; // 'name', 'ip', 'mac', 'ping', 'status'
+  bool _sortAscending = true;
   bool _isLoading = false;
   bool _isPolling = true;
 
@@ -28,6 +30,8 @@ class DeviceService extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   String get selectedGroup => _selectedGroup;
   String get statusFilter => _statusFilter;
+  String get sortColumn => _sortColumn;
+  bool get sortAscending => _sortAscending;
   bool get isLoading => _isLoading;
   bool get isPolling => _isPolling;
 
@@ -66,8 +70,8 @@ class DeviceService extends ChangeNotifier {
     }).toList();
   }
 
-  DeviceService() {
-    _initialize();
+  DeviceService({bool initialize = true}) {
+    if (initialize) _initialize();
   }
 
   Future<void> _initialize() async {
@@ -135,6 +139,16 @@ class DeviceService extends ChangeNotifier {
 
   void setStatusFilter(String status) {
     _statusFilter = status;
+    notifyListeners();
+  }
+
+  void setSort(String column, {bool? ascending}) {
+    if (_sortColumn == column && ascending == null) {
+      _sortAscending = !_sortAscending;
+    } else {
+      _sortColumn = column;
+      _sortAscending = ascending ?? true;
+    }
     notifyListeners();
   }
 

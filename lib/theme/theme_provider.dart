@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../core/utils/app_storage.dart';
 import 'app_colors.dart';
 import 'styles_win10.dart';
 import 'styles_win11.dart';
@@ -67,7 +69,9 @@ class ThemeProvider extends ChangeNotifier {
   void _syncNativeTheme() {
     if (!Platform.isWindows) return;
     try {
-      _themeChannel.invokeMethod<void>('setTheme', {'isDark': isDark});
+      _themeChannel
+          .invokeMethod<void>('setTheme', {'isDark': isDark})
+          .catchError((_) {});
     } catch (_) {}
   }
 
@@ -282,6 +286,93 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  File? _customStorageFile;
+
+  /// Sets custom storage file for testing.
+  void setStorageFileForTesting(File? file) {
+    _customStorageFile = file;
+  }
+
+  Future<File> _getStorageFile() async {
+    if (_customStorageFile != null) return _customStorageFile!;
+    return AppStorage.getFile('app_settings.json');
+  }
+
+  /// Creates and initializes ThemeProvider with loaded preference from storage.
+  static Future<ThemeProvider> create({
+    String initialMode = 'system',
+    File? storageFile,
+  }) async {
+    final provider = ThemeProvider(initialMode: initialMode);
+    if (storageFile != null) {
+      provider.setStorageFileForTesting(storageFile);
+    }
+    await provider.loadSavedSettings();
+    return provider;
+  }
+
+  /// Loads saved theme mode and glassmorphism parameters from JSON storage.
+  Future<void> loadSavedSettings() async {
+    try {
+      final file = await _getStorageFile();
+      if (await file.exists()) {
+        final raw = await file.readAsString();
+        if (raw.trim().isNotEmpty) {
+          final data = jsonDecode(raw);
+          if (data is Map<String, dynamic>) {
+            if (data['theme_mode'] is String) {
+              _themeMode = data['theme_mode'] as String;
+            }
+            if (data['card_blur'] is num) {
+              _cardBlur = (data['card_blur'] as num).toDouble();
+            }
+            if (data['card_opacity'] is num) {
+              _cardOpacity = (data['card_opacity'] as num).toDouble();
+            }
+            if (data['dialog_blur'] is num) {
+              _dialogBlur = (data['dialog_blur'] as num).toDouble();
+            }
+            if (data['dialog_opacity'] is num) {
+              _dialogOpacity = (data['dialog_opacity'] as num).toDouble();
+            }
+            if (data['dropdown_blur'] is num) {
+              _dropdownBlur = (data['dropdown_blur'] as num).toDouble();
+            }
+            if (data['dropdown_opacity'] is num) {
+              _dropdownOpacity = (data['dropdown_opacity'] as num).toDouble();
+            }
+            notifyListeners();
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Persists current glassmorphism parameters to JSON storage.
+  Future<void> saveSettings() async {
+    try {
+      final file = await _getStorageFile();
+      Map<String, dynamic> data = {};
+      if (await file.exists()) {
+        final raw = await file.readAsString();
+        if (raw.trim().isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) {
+            data = decoded;
+          }
+        }
+      }
+      data['theme_mode'] = _themeMode;
+      data['card_blur'] = _cardBlur;
+      data['card_opacity'] = _cardOpacity;
+      data['dialog_blur'] = _dialogBlur;
+      data['dialog_opacity'] = _dialogOpacity;
+      data['dropdown_blur'] = _dropdownBlur;
+      data['dropdown_opacity'] = _dropdownOpacity;
+      await file.writeAsString(jsonEncode(data), flush: true);
+    } catch (_) {}
+  }
+
   void resetToDefaults() {
     _perfMode = PerfTierMode.auto;
     _cardBlur = 20.0;
@@ -289,9 +380,10 @@ class ThemeProvider extends ChangeNotifier {
     _dialogBlur = 20.0;
     _dialogOpacity = 0.85;
     _dropdownBlur = 20.0;
-    _dropdownOpacity = 0.86;
+    _dropdownOpacity = 0.95;
     _profileHardware();
     notifyListeners();
+    saveSettings();
   }
 }
 

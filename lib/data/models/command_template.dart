@@ -6,6 +6,7 @@ class CommandTemplate {
   final String type; // 'powershell', 'ssh', 'cmd'
   final String command;
   final String description;
+  final bool isCustom;
 
   const CommandTemplate({
     required this.id,
@@ -14,7 +15,28 @@ class CommandTemplate {
     required this.type,
     required this.command,
     this.description = '',
+    this.isCustom = false,
   });
+
+  CommandTemplate copyWith({
+    String? id,
+    String? name,
+    String? platform,
+    String? type,
+    String? command,
+    String? description,
+    bool? isCustom,
+  }) {
+    return CommandTemplate(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      platform: platform ?? this.platform,
+      type: type ?? this.type,
+      command: command ?? this.command,
+      description: description ?? this.description,
+      isCustom: isCustom ?? this.isCustom,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -23,6 +45,7 @@ class CommandTemplate {
     'type': type,
     'command': command,
     'description': description,
+    'isCustom': isCustom,
   };
 
   factory CommandTemplate.fromJson(Map<String, dynamic> json) {
@@ -33,6 +56,7 @@ class CommandTemplate {
       type: json['type'] as String? ?? 'powershell',
       command: json['command'] as String,
       description: json['description'] as String? ?? '',
+      isCustom: json['isCustom'] as bool? ?? false,
     );
   }
 

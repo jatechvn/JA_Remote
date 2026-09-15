@@ -122,7 +122,7 @@ class DynamicIslandCapsule extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(100),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
           decoration: BoxDecoration(
             color: colors.subCardBg,
             borderRadius: BorderRadius.circular(100),
@@ -145,7 +145,7 @@ class DynamicIslandCapsule extends StatelessWidget {
             children: [
               if (isRunning) ...[
                 WaveIndicator(color: activeColor, height: 12),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Container(
                   width: 6,
                   height: 6,
@@ -165,14 +165,14 @@ class DynamicIslandCapsule extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 100),
+                constraints: const BoxConstraints(maxWidth: 85),
                 child: AsymmetricMarqueeText(
                   text: statusText,
                   style: TextStyle(
                     color: isRunning ? activeColor : colors.textMuted,
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                     fontFamily: 'JetBrains Mono',
                     letterSpacing: 0.35,
@@ -427,16 +427,16 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
         final tabCount = widget.tabs.length;
 
         // Smart space calculations:
-        // Full width (Icon + Text): ~134px per tab + container padding
-        final fullWidthNeeded = tabCount * 134.0 + 24.0;
-        // Text-only width (No icon): ~92px per tab + container padding
-        final textOnlyWidthNeeded = tabCount * 92.0 + 24.0;
+        // Full width (Icon + Text): ~105px per tab + container padding
+        final fullWidthNeeded = tabCount * 105.0 + 16.0;
+        // Text-only width (No icon): ~76px per tab + container padding
+        final textOnlyWidthNeeded = tabCount * 76.0 + 16.0;
 
         final bool canFitFull = availableWidth >= fullWidthNeeded;
         final bool canFitTextOnly = availableWidth >= textOnlyWidthNeeded;
 
-        // When space is medium (e.g. 640px to 940px): omit icons so all Vietnamese tab labels fit without cutting off.
-        // When space is narrow (< 640px): unselected tabs collapse to icons (accordion dock).
+        // When space is medium: omit icons so all tab labels fit without cutting off.
+        // When space is narrow: unselected tabs collapse to icons (accordion dock).
         final bool showIcon =
             canFitFull || (!canFitTextOnly && widget.adaptiveCollapse);
         final bool shouldCollapse =
@@ -599,6 +599,7 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
                           message: widget.tabs[index],
                           waitDuration: const Duration(milliseconds: 600),
                           child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
                             onTap: () {
                               _scrollToIndex(index);
                               widget.onTabSelected(index);
@@ -607,8 +608,8 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
                               duration: const Duration(milliseconds: 220),
                               curve: Curves.easeOutCubic,
                               padding: EdgeInsets.symmetric(
-                                horizontal: showLabel ? 12 : 9,
-                                vertical: 5.5,
+                                horizontal: showLabel ? 10 : 8,
+                                vertical: 5,
                               ),
                               decoration: decoration,
                               foregroundDecoration: foregroundDeco,
@@ -618,19 +619,19 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
                                   if (showIcon) ...[
                                     Icon(
                                       widget.icons[index],
-                                      size: 14.5,
+                                      size: 14,
                                       color: isSelected
                                           ? Colors.white
                                           : (isHovered
                                                 ? widget.colors.textPrimary
                                                 : widget.colors.textSecondary),
                                     ),
-                                    if (showLabel) const SizedBox(width: 5.5),
+                                    if (showLabel) const SizedBox(width: 5),
                                   ],
                                   if (showLabel) ...[
                                     ConstrainedBox(
                                       constraints: BoxConstraints(
-                                        maxWidth: canFitFull ? 145 : 115,
+                                        maxWidth: canFitFull ? 130 : 105,
                                       ),
                                       child: isSelected
                                           ? AsymmetricMarqueeText(
@@ -741,3 +742,279 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
 /// - BẬT NẢY NHANH về đầu chuỗi (Curves.easeOut, cố định 800ms).
 /// - Dừng 1500ms ở đầu chuỗi trước khi lặp lại.
 /// - 0% CPU khi chữ vừa vặn khung (maxScrollExtent <= 0).
+
+/// Seamless Glassmorphic Horizontal Scroll View with:
+/// - Windows Desktop Mouse-Wheel Scrolling: effortlessly scrolls horizontally when mouse wheel rolls (dy/dx) anywhere over the container.
+/// - Tactile Smart Bounce Hint: elastic bounce nudge on initial display/overflow to notify user that more content exists off-screen.
+/// - BouncingScrollPhysics: natural elastic physics on drag or boundary scroll.
+/// - Ambient Glass Navigation Chevrons & Edge Fades: subtle glowing arrows appear when scrolled/overflowed for 1-click gliding.
+class GlassHorizontalScrollView extends StatefulWidget {
+  final Widget child;
+  final AppColors colors;
+  final bool enableBounceHint;
+  final bool enableChevrons;
+  final double scrollStep;
+  final EdgeInsetsGeometry padding;
+  final ScrollController? controller;
+
+  const GlassHorizontalScrollView({
+    super.key,
+    required this.child,
+    required this.colors,
+    this.enableBounceHint = true,
+    this.enableChevrons = true,
+    this.scrollStep = 160.0,
+    this.padding = EdgeInsets.zero,
+    this.controller,
+  });
+
+  @override
+  State<GlassHorizontalScrollView> createState() =>
+      _GlassHorizontalScrollViewState();
+}
+
+class _GlassHorizontalScrollViewState extends State<GlassHorizontalScrollView> {
+  late ScrollController _scrollController;
+  bool _ownsController = false;
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+  bool _hasTriggeredBounce = false;
+  Timer? _bounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.controller != null) {
+      _scrollController = widget.controller!;
+    } else {
+      _scrollController = ScrollController();
+      _ownsController = true;
+    }
+    _scrollController.addListener(_updateScrollIndicators);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateScrollIndicators();
+      if (widget.enableBounceHint) {
+        _checkAndTriggerBounce();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant GlassHorizontalScrollView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _scrollController.removeListener(_updateScrollIndicators);
+      if (_ownsController) {
+        _scrollController.dispose();
+      }
+      if (widget.controller != null) {
+        _scrollController = widget.controller!;
+        _ownsController = false;
+      } else {
+        _scrollController = ScrollController();
+        _ownsController = true;
+      }
+      _scrollController.addListener(_updateScrollIndicators);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateScrollIndicators();
+      if (widget.enableBounceHint && !_hasTriggeredBounce) {
+        _checkAndTriggerBounce();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _bounceTimer?.cancel();
+    _scrollController.removeListener(_updateScrollIndicators);
+    if (_ownsController) {
+      _scrollController.dispose();
+    }
+    super.dispose();
+  }
+
+  void _updateScrollIndicators() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final offset = _scrollController.offset;
+    final canLeft = offset > 4.0;
+    final canRight = offset < maxScroll - 4.0;
+    if (canLeft != _canScrollLeft || canRight != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = canLeft;
+        _canScrollRight = canRight;
+      });
+    }
+  }
+
+  void _checkAndTriggerBounce() {
+    if (_hasTriggeredBounce) return;
+    _bounceTimer?.cancel();
+    _bounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      if (maxScroll > 6.0) {
+        _hasTriggeredBounce = true;
+        _triggerBounceHint();
+      }
+    });
+  }
+
+  /// Tactile Bounce Nudge hint animation (mirrors sample_components_motion pattern)
+  void _triggerBounceHint() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    if (maxScroll <= 4.0) return;
+
+    final startOffset = _scrollController.offset;
+    final peekOffset = math.min(startOffset + 48.0, maxScroll);
+    if (peekOffset <= startOffset) return;
+
+    _scrollController
+        .animateTo(
+          peekOffset,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        )
+        .then((_) {
+          if (!mounted || !_scrollController.hasClients) return;
+          _scrollController.animateTo(
+            startOffset,
+            duration: const Duration(milliseconds: 480),
+            curve: Curves.elasticOut,
+          );
+        });
+  }
+
+  Widget _buildChevron({required bool isLeft}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(100),
+        onTap: () {
+          if (!_scrollController.hasClients) return;
+          final delta = isLeft ? -widget.scrollStep : widget.scrollStep;
+          final target = (_scrollController.offset + delta).clamp(
+            0.0,
+            _scrollController.position.maxScrollExtent,
+          );
+          _scrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+          );
+        },
+        child: Container(
+          width: 20,
+          height: 24,
+          decoration: BoxDecoration(
+            color: widget.colors.accentCyan.withValues(alpha: 0.22),
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(
+              color: widget.colors.accentCyan.withValues(alpha: 0.55),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.colors.accentCyan.withValues(alpha: 0.20),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            isLeft ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+            size: 14,
+            color: widget.colors.accentCyan,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Listener(
+          onPointerSignal: (pointerSignal) {
+            if (pointerSignal is PointerScrollEvent &&
+                _scrollController.hasClients) {
+              final double delta = pointerSignal.scrollDelta.dy != 0
+                  ? pointerSignal.scrollDelta.dy
+                  : pointerSignal.scrollDelta.dx;
+              final target = (_scrollController.offset + delta).clamp(
+                0.0,
+                _scrollController.position.maxScrollExtent,
+              );
+              _scrollController.jumpTo(target);
+            }
+          },
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            padding: widget.padding,
+            child: widget.child,
+          ),
+        ),
+        // Left fade gradient and navigation chevron
+        if (_canScrollLeft) ...[
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                width: 28,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      widget.colors.cardBg,
+                      widget.colors.cardBg.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (widget.enableChevrons)
+            Positioned(left: 2, child: _buildChevron(isLeft: true)),
+        ],
+        // Right fade gradient and navigation chevron
+        if (_canScrollRight) ...[
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                width: 28,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerRight,
+                    end: Alignment.centerLeft,
+                    colors: [
+                      widget.colors.cardBg,
+                      widget.colors.cardBg.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (widget.enableChevrons)
+            Positioned(right: 2, child: _buildChevron(isLeft: false)),
+        ],
+      ],
+    );
+  }
+}

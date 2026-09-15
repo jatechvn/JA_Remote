@@ -26,6 +26,8 @@ class GlassScriptEditor extends StatefulWidget {
   final VoidCallback? onClear;
   final List<GlassScriptSnippet>? quickSnippets;
   final ValueChanged<String>? onSelectSnippet;
+  final bool expands;
+  final FocusNode? focusNode;
 
   const GlassScriptEditor({
     super.key,
@@ -39,6 +41,8 @@ class GlassScriptEditor extends StatefulWidget {
     this.onClear,
     this.quickSnippets,
     this.onSelectSnippet,
+    this.expands = false,
+    this.focusNode,
   });
 
   @override
@@ -170,7 +174,7 @@ class _GlassScriptEditorState extends State<GlassScriptEditor> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: widget.expands ? MainAxisSize.max : MainAxisSize.min,
         children: [
           // 1. Window Header Chrome (Traffic Lights + Title Pill + Actions)
           Container(
@@ -312,89 +316,209 @@ class _GlassScriptEditorState extends State<GlassScriptEditor> {
           ),
 
           // 2. Editor Canvas with Line Numbers Gutter
-          Container(
-            color: editorBg,
-            height: (widget.maxLines * 20.0).clamp(110.0, 160.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Line Numbers Gutter
-                Container(
-                  width: 36,
-                  padding: const EdgeInsets.only(top: 8, bottom: 8, right: 6),
-                  decoration: BoxDecoration(
-                    color: gutterBg,
-                    border: Border(
-                      right: BorderSide(color: innerBorderColor, width: 1),
-                    ),
-                  ),
-                  child: ListView.builder(
-                    controller: _gutterScrollController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: math.max(_lineCount, widget.minLines),
-                    itemBuilder: (ctx, index) {
-                      final hasContent = index < _lineCount;
-                      return Container(
-                        height: 20,
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            height: 1.0,
-                            fontFamily: 'monospace',
-                            fontFamilyFallback: const ['Consolas', 'monospace'],
-                            fontWeight: FontWeight.w600,
-                            color: hasContent
-                                ? gutterTextColor
-                                : gutterTextColor.withValues(alpha: 0.35),
+          widget.expands
+              ? Expanded(
+                  child: Container(
+                    color: editorBg,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Line Numbers Gutter
+                        Container(
+                          width: 36,
+                          padding: const EdgeInsets.only(
+                            top: 8,
+                            bottom: 8,
+                            right: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: gutterBg,
+                            border: Border(
+                              right: BorderSide(
+                                color: innerBorderColor,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: ListView.builder(
+                            controller: _gutterScrollController,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: math.max(_lineCount, widget.minLines),
+                            itemBuilder: (ctx, index) {
+                              final hasContent = index < _lineCount;
+                              return Container(
+                                height: 20,
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    height: 1.0,
+                                    fontFamily: 'monospace',
+                                    fontFamilyFallback: const [
+                                      'Consolas',
+                                      'monospace',
+                                    ],
+                                    fontWeight: FontWeight.w600,
+                                    color: hasContent
+                                        ? gutterTextColor
+                                        : gutterTextColor.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
 
-                // Multiline TextField
-                Expanded(
-                  child: TextField(
-                    controller: widget.controller,
-                    scrollController: _textScrollController,
-                    maxLines: null,
-                    expands: true,
-                    keyboardType: TextInputType.multiline,
-                    style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontFamilyFallback: const [
-                        'Consolas',
-                        'Courier New',
-                        'monospace',
+                        // Multiline TextField
+                        Expanded(
+                          child: TextField(
+                            focusNode: widget.focusNode,
+                            controller: widget.controller,
+                            scrollController: _textScrollController,
+                            maxLines: null,
+                            expands: true,
+                            keyboardType: TextInputType.multiline,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontFamilyFallback: const [
+                                'Consolas',
+                                'Courier New',
+                                'monospace',
+                              ],
+                              fontSize: 12.5,
+                              height: 1.6,
+                              color: textCodeColor,
+                            ),
+                            cursorColor: textCodeColor,
+                            cursorWidth: 2,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.fromLTRB(
+                                10,
+                                8,
+                                10,
+                                8,
+                              ),
+                              hintText:
+                                  widget.hintText ?? lang.t('cmd_script_hint'),
+                              hintStyle: TextStyle(
+                                fontSize: 11.5,
+                                fontFamily: 'monospace',
+                                color: gutterTextColor.withValues(alpha: 0.8),
+                              ),
+                              border: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                            ),
+                            onChanged: widget.onChanged,
+                          ),
+                        ),
                       ],
-                      fontSize: 12.5,
-                      height: 1.6,
-                      color: textCodeColor,
                     ),
-                    cursorColor: textCodeColor,
-                    cursorWidth: 2,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                      hintText: widget.hintText ?? lang.t('cmd_script_hint'),
-                      hintStyle: TextStyle(
-                        fontSize: 11.5,
-                        fontFamily: 'monospace',
-                        color: gutterTextColor.withValues(alpha: 0.8),
+                  ),
+                )
+              : Container(
+                  color: editorBg,
+                  height: (widget.maxLines * 20.0).clamp(110.0, 300.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Line Numbers Gutter
+                      Container(
+                        width: 36,
+                        padding: const EdgeInsets.only(
+                          top: 8,
+                          bottom: 8,
+                          right: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: gutterBg,
+                          border: Border(
+                            right: BorderSide(
+                              color: innerBorderColor,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        child: ListView.builder(
+                          controller: _gutterScrollController,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: math.max(_lineCount, widget.minLines),
+                          itemBuilder: (ctx, index) {
+                            final hasContent = index < _lineCount;
+                            return Container(
+                              height: 20,
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '${index + 1}',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  height: 1.0,
+                                  fontFamily: 'monospace',
+                                  fontFamilyFallback: const [
+                                    'Consolas',
+                                    'monospace',
+                                  ],
+                                  fontWeight: FontWeight.w600,
+                                  color: hasContent
+                                      ? gutterTextColor
+                                      : gutterTextColor.withValues(alpha: 0.35),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                      border: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                    ),
-                    onChanged: widget.onChanged,
+
+                      // Multiline TextField
+                      Expanded(
+                        child: TextField(
+                          controller: widget.controller,
+                          scrollController: _textScrollController,
+                          maxLines: null,
+                          expands: true,
+                          keyboardType: TextInputType.multiline,
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontFamilyFallback: const [
+                              'Consolas',
+                              'Courier New',
+                              'monospace',
+                            ],
+                            fontSize: 12.5,
+                            height: 1.6,
+                            color: textCodeColor,
+                          ),
+                          cursorColor: textCodeColor,
+                          cursorWidth: 2,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.fromLTRB(
+                              10,
+                              8,
+                              10,
+                              8,
+                            ),
+                            hintText:
+                                widget.hintText ?? lang.t('cmd_script_hint'),
+                            hintStyle: TextStyle(
+                              fontSize: 11.5,
+                              fontFamily: 'monospace',
+                              color: gutterTextColor.withValues(alpha: 0.8),
+                            ),
+                            border: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                          ),
+                          onChanged: widget.onChanged,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
 
           // 3. Quick Snippet Chips Bar
           if (widget.quickSnippets != null &&
@@ -413,7 +537,7 @@ class _GlassScriptEditorState extends State<GlassScriptEditor> {
                 child: Row(
                   children: [
                     Text(
-                      'Snippets:',
+                      lang.t('script_snippets'),
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,

@@ -1,3 +1,4 @@
+import '../../widgets/route_shortcuts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -5,10 +6,12 @@ import 'package:provider/provider.dart';
 import '../../theme/theme_provider.dart';
 import '../../theme/language_provider.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/glass_search_history_field.dart';
 import '../../data/repositories/log_repository.dart';
 
 class LogsView extends StatefulWidget {
-  const LogsView({super.key});
+  final bool isActive;
+  const LogsView({super.key, this.isActive = false});
 
   @override
   State<LogsView> createState() => _LogsViewState();
@@ -16,12 +19,34 @@ class LogsView extends StatefulWidget {
 
 class _LogsViewState extends State<LogsView> {
   final _logRepo = LogRepository();
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   String _filter = 'ALL';
   String _searchQuery = '';
 
-  final _searchFocus = FocusNode();
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LogsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
   }
@@ -50,7 +75,7 @@ class _LogsViewState extends State<LogsView> {
 
     final timeFmt = DateFormat('HH:mm:ss');
 
-    return CallbackShortcuts(
+    return RouteShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _searchFocus.requestFocus,
@@ -67,46 +92,53 @@ class _LogsViewState extends State<LogsView> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
-                  // Search input
+                  // Search input with history suggestions
                   Expanded(
                     flex: 3,
-                    child: SizedBox(
+                    child: GlassSearchHistoryField(
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      category: 'logs',
+                      hintText: language.t('logs_search_hint'),
                       height: 36,
-                      child: TextField(
-                        focusNode: _searchFocus,
-                        onChanged: (v) => setState(() => _searchQuery = v),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: language.t('logs_search_hint'),
-                          hintStyle: TextStyle(
-                            fontSize: 12,
-                            color: colors.textMuted,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search_rounded,
-                            size: 18,
-                            color: colors.textMuted,
-                          ),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          filled: true,
-                          fillColor: colors.cardBg,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.cardBorder),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.cardBorder),
-                          ),
-                        ),
-                      ),
+                      fontSize: 13,
+                      hintFontSize: 12,
+                      borderRadius: 8,
+                      suffixBadge: _searchQuery.trim().isNotEmpty
+                          ? Container(
+                              margin: const EdgeInsets.only(right: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.accentCyan.withValues(
+                                  alpha: 0.18,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: colors.accentCyan.withValues(
+                                    alpha: 0.35,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                '${filtered.length}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.accentCyan,
+                                ),
+                              ),
+                            )
+                          : null,
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                      onSubmitted: (v) => setState(() => _searchQuery = v),
+                      onClear: () => setState(() {
+                        _searchQuery = '';
+                        _searchController.clear();
+                      }),
                     ),
                   ),
                   const SizedBox(width: 12),

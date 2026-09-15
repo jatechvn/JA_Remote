@@ -1,6 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import 'glass_widgets.dart';
 
 /// Reusable Bento Glass Card surface with subtle border, backdrop blur and rounded corners.
 class GlassCard extends StatelessWidget {
@@ -8,8 +8,12 @@ class GlassCard extends StatelessWidget {
   final AppColors colors;
   final EdgeInsetsGeometry? padding;
   final double borderRadius;
-  final double blurSigma;
+  final double? blurSigma;
+  final double? bgOpacity;
   final VoidCallback? onTap;
+  final bool isFeatured;
+  final Color? customBg;
+  final Color? customBorder;
 
   const GlassCard({
     super.key,
@@ -17,43 +21,28 @@ class GlassCard extends StatelessWidget {
     required this.colors,
     this.padding,
     this.borderRadius = 12,
-    this.blurSigma = 16,
+    this.blurSigma,
+    this.bgOpacity,
     this.onTap,
+    this.isFeatured = false,
+    this.customBg,
+    this.customBorder,
   });
 
   @override
   Widget build(BuildContext context) {
-    Widget content = ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: colors.cardBg,
-            borderRadius: BorderRadius.circular(borderRadius),
-            border: Border.all(color: colors.borderDefault),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: child,
-        ),
-      ),
+    return BentoCard(
+      colors: colors,
+      borderRadius: borderRadius,
+      padding: padding,
+      blurSigma: blurSigma,
+      bgOpacity: bgOpacity,
+      onTap: onTap,
+      isFeatured: isFeatured,
+      customBg: customBg,
+      customBorder: customBorder,
+      child: child,
     );
-
-    if (onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: content,
-      );
-    }
-    return content;
   }
 }
 
@@ -100,12 +89,15 @@ class GlassButton extends StatelessWidget {
                 Icon(icon, size: 16, color: effectiveColor),
                 const SizedBox(width: 6),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: effectiveColor,
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: effectiveColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

@@ -13,6 +13,9 @@ import 'modules/logger_config.dart';
 import 'modules/window_helper.dart';
 import 'services/device_service.dart';
 import 'services/discovery_service.dart';
+import 'core/network/mac_oui_resolver.dart';
+import 'core/utils/app_storage.dart';
+import 'features/devices/port_scanner_dialog.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,18 +33,32 @@ void main(List<String> args) async {
     minSize: const Size(800, 560),
   );
 
-  runApp(const JaRemoteApp());
+  await AppStorage.migrateLegacyFolderIfNeeded();
+  final themeProvider = await ThemeProvider.create();
+  final languageProvider = await LanguageProvider.create();
+  await MacOuiResolver.initialize();
+
+  runApp(
+    JaRemoteApp(
+      themeProvider: themeProvider,
+      languageProvider: languageProvider,
+    ),
+  );
 }
 
 class JaRemoteApp extends StatelessWidget {
-  const JaRemoteApp({super.key});
+  final ThemeProvider? themeProvider;
+  final LanguageProvider? languageProvider;
+  const JaRemoteApp({super.key, this.themeProvider, this.languageProvider});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider.value(value: themeProvider ?? ThemeProvider()),
+        ChangeNotifierProvider.value(
+          value: languageProvider ?? LanguageProvider(),
+        ),
         ChangeNotifierProvider(create: (_) => DeviceService()),
         ChangeNotifierProvider(create: (_) => DiscoveryService()),
       ],
@@ -72,6 +89,7 @@ class _AppContent extends StatelessWidget {
         builder: (ctx) {
           final deviceService = ctx.read<DeviceService>();
           final discovery = ctx.read<DiscoveryService>();
+          final language = ctx.read<LanguageProvider>();
 
           return CommandPaletteShortcut(
             items: () => [
@@ -139,6 +157,13 @@ class _AppContent extends StatelessWidget {
                     accentColor: colors.accentCyan,
                   );
                 },
+              ),
+              CommandPaletteItem(
+                label: language.t('port_scanner_title'),
+                subtitle: language.t('port_scanner_desc'),
+                icon: Icons.radar_rounded,
+                keywords: const ['port', 'scanner', 'tcp', 'test', 'quet cong'],
+                onSelect: () => showPortScannerDialog(ctx),
               ),
             ],
             child: DashboardShell(

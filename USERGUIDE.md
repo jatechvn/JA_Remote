@@ -1,54 +1,79 @@
-# Hướng dẫn sử dụng JA Remote v1.1.0
+# Hướng dẫn sử dụng JA Remote v1.2.0
 
 ## Cài đặt portable
 
-Giải nén toàn bộ `JA_Remote_v1.1.0_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy EXE. Chạy `debug.bat` khi cần ghi log chẩn đoán. Bản phát hành dành cho Windows x64.
+Giải nén toàn bộ `JA_Remote_v1.2.0_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy EXE. Chạy `debug.bat` khi cần ghi log chẩn đoán. Bản phát hành dành cho Windows x64.
 
 ## Thiết bị và quét LAN
 
-1. Nhấn Ctrl+N ở tab Thiết bị để thêm máy với IP/hostname, tên, nhóm và MAC nếu dùng WOL.
-2. Hoặc nhấn Ctrl+2, kiểm tra subnet trước khi bắt đầu quét rồi thêm các máy tìm thấy.
-3. Dùng Ctrl+F để tìm kiếm; bộ lọc nhóm và trạng thái giúp thu hẹp danh sách.
-4. Chọn checkbox của các máy cần thao tác; kiểm tra số lượng và danh sách đích trước tác vụ hàng loạt. Ctrl+Shift+A cộng thêm các máy đang lọc vào lựa chọn trước đó, không loại các máy đã chọn đang bị ẩn.
-5. F5 cập nhật Ping; có thể tạm dừng Auto-Ping bằng nút trên thanh công cụ.
+1. Nhấn **Ctrl+N** ở tab Thiết bị để thêm máy với IP/hostname, tên, nhóm và MAC nếu dùng WOL.
+2. Hoặc nhấn **Ctrl+2**, kiểm tra subnet trước khi bắt đầu quét rồi thêm các máy tìm thấy.
+3. Dùng **Ctrl+F** để tìm kiếm; bộ lọc nhóm và trạng thái giúp thu hẹp danh sách. Ô tìm kiếm tự động ghi nhớ và gợi ý lịch sử truy vấn trước đó.
+4. Con trỏ soạn thảo luôn tự động sẵn sàng tại ô tìm kiếm khi chuyển sang các tab Thiết bị, Quét LAN hoặc Nhật ký.
+5. Chọn checkbox của các máy cần thao tác; kiểm tra số lượng và danh sách đích trước tác vụ hàng loạt. **Ctrl+Shift+A** cộng thêm các máy đang lọc vào lựa chọn trước đó, không loại các máy đã chọn đang bị ẩn.
+6. **F5** cập nhật Ping; có thể tạm dừng Auto-Ping bằng nút trên thanh công cụ.
 
 ## Remote và thực thi lệnh
 
-- RDP, C$ và Computer Management mở các công cụ quản trị Windows tương ứng.
-- WOL cần MAC hợp lệ và cấu hình BIOS/NIC cho phép Wake-on-LAN.
-- Chọn máy, nhấn Ctrl+3, chọn PowerShell/WinRM hoặc SSH; nhập tài khoản, xem lại script rồi nhấn Ctrl+Enter để chạy ngay trên các đích đã chọn.
+- **RDP, C$ và Computer Management:** mở các công cụ quản trị Windows tương ứng.
+- **WOL:** cần MAC hợp lệ và cấu hình BIOS/NIC cho phép Wake-on-LAN.
+- **Command Runner (Ctrl+3):** chọn máy, chọn PowerShell/WinRM hoặc SSH; nhập tài khoản, xem lại script rồi nhấn **Ctrl+Enter** để chạy ngay trên các đích đã chọn. Con trỏ tự động sẵn sàng tại ô nhập lệnh.
 - Khởi động lại/tắt máy dùng hộp thoại xác nhận của thao tác tương ứng.
-- Chuyển tab khi lệnh đang chạy không hủy tác vụ đã gửi đến máy đích.
+- Chuyển tab khi lệnh đang chạy không hủy tác vụ đã gửi đến máy đích, toàn bộ nội dung lệnh gõ dở và lịch sử output được bảo toàn trọn vẹn.
 
-## Phím tắt
+## Triển khai tệp đa thiết bị (File Deployer - Ctrl+4)
 
-- Ctrl+1…4: Chuyển tab
-- Ctrl+K: Mở Command Palette; ↑/↓ chọn, Enter chạy, Esc đóng
-- Ctrl+,: Mở cài đặt
-- Ctrl+F: Tìm kiếm ở Thiết bị, Quét LAN, Nhật ký
-- Ctrl+N: Thêm thiết bị (tab Thiết bị)
-- F5: Làm mới Thiết bị / Nhật ký
-- Ctrl+Shift+A: Chọn thiết bị đang lọc (giữ lựa chọn trước đó)
-- Ctrl+Shift+D: Bỏ chọn tất cả thiết bị
-- Ctrl+Enter: Chạy lệnh trên các đích đã chọn trong Command Runner
-- F1: Xem phím tắt
+1. **Chọn nguồn:** Bấm *Chọn File* hoặc *Chọn Thư mục* để chọn tệp/gói cập nhật cần phân phối. App hỗ trợ tự động ghi nhớ các đường dẫn nguồn gần nhất.
+2. **Chọn đích:** Nhập đường dẫn đích trên máy từ xa (ví dụ `C:\Temp\Deploy` hoặc `/tmp/deploy/`) hoặc chọn từ các nút Preset / lịch sử gợi ý.
+3. **Tùy chọn nâng cao:**
+   - *Tạo thư mục nếu chưa có:* Tự động tạo cây thư mục đích nếu máy từ xa chưa tồn tại.
+   - *Ghi đè file nếu đã tồn tại:* Cho phép ghi đè phiên bản mới.
+   - *Tự động đóng file/tiến trình đang chạy:* Tự động quét và terminate tiến trình đang chiếm giữ khóa file trên máy đích, đồng thời sử dụng cơ chế an toàn đổi tên (`.jad_old_*`) để thay thế các tệp đang mở ở chế độ Memory-Mapped Section mà không gây lỗi khóa tệp.
+4. **Hỗ trợ thư mục lớn:** Hệ thống tự động chuyển giao thức kịch bản sang file UTF-8 BOM tạm thời khi khối lượng danh sách file lớn, triệt tiêu hoàn toàn giới hạn 32.767 ký tự của dòng lệnh Windows (`ProcessThe filename or extension is too long`).
+5. **Giao diện tự động thích ứng (Responsive Auto-Collapse):** Khi màn hình có chiều cao hạn chế (< 720px), khối *Target Devices* tự động thu gọn để đảm bảo nút **Start File Deploy** luôn hiện rõ trong tầm nhìn; người dùng có thể click vào thanh tiêu đề để mở rộng/thu gọn thủ công bất cứ lúc nào.
 
-Phím theo tab chỉ áp dụng trong màn hình tương ứng; Ctrl+A/C/V trong ô nhập vẫn phục vụ soạn thảo. Nhấn Tab/Shift+Tab để đi qua các điều khiển hỗ trợ focus.
+## Quét cổng mạng (TCP Port Scanner)
+
+1. **Khởi chạy:** Nhấn **Ctrl+P** hoặc **Ctrl+K** để mở Command Palette rồi gõ *Scan Ports*, hoặc bấm vào biểu tượng mạng trên thẻ thiết bị, hoặc chọn *Quét cổng (Port Scanner)* trong menu ngữ cảnh.
+2. **Chế độ quét:**
+   - *Cổng thông dụng (Presets):* Quét nhanh các cổng dịch vụ tiêu chuẩn: SSH (22), RDP (3389), Web HTTP/HTTPS (80, 443), WinRM (5985, 5986), SMB (445), ADB (5555), FTP (21), Telnet (23), Database (3306, 6379), VNC (5900).
+   - *Dải cổng tùy chọn (Custom Range):* Nhập cổng bắt đầu và kết thúc (từ 1 đến 65535).
+3. **Cấu hình hiệu năng:** Cho phép điều chỉnh Timeout (50ms - 5000ms) và Số luồng đồng thời (Concurrency từ 5 đến 200 workers) để quét siêu tốc trong mạng LAN.
+4. **Hành động nhanh từ kết quả:** Bấm trực tiếp vào các nút thao tác nhanh bên cạnh cổng mở:
+   - Cổng 3389: Mở ngay Remote Desktop (RDP).
+   - Cổng 445: Mở ngay chia sẻ mạng Windows Explorer (`\\IP\c$`).
+   - Cổng 80/443: Mở trang Web quản trị trên trình duyệt mặc định.
+   - Cổng 22: Mở phiên SSH terminal.
+
+## Phím tắt toàn cục
+
+- **Ctrl+1…5:** Chuyển nhanh 5 tab (Thiết bị, Quét LAN, Commands, File Deploy, Nhật ký).
+- **Ctrl+P / Ctrl+K:** Mở Command Palette & Công cụ chẩn đoán nhanh; ↑/↓ chọn, Enter chạy, Esc đóng.
+- **Ctrl+,:** Mở cài đặt hệ thống & hiệu ứng kính.
+- **Ctrl+F:** Tìm kiếm ở Thiết bị, Quét LAN, Nhật ký (kèm lịch sử gợi ý).
+- **Ctrl+N:** Thêm thiết bị (tab Thiết bị).
+- **F5:** Làm mới Thiết bị / Nhật ký.
+- **Ctrl+Shift+A:** Chọn thêm thiết bị đang lọc (giữ lựa chọn trước đó).
+- **Ctrl+Shift+D:** Bỏ chọn tất cả thiết bị.
+- **Ctrl+Enter:** Chạy lệnh trong Command Runner hoặc kích hoạt Start File Deploy.
+- **F1:** Xem bảng tra cứu phím tắt.
+
+Phím theo tab chỉ áp dụng trong màn hình tương ứng; Ctrl+A/C/V trong ô nhập vẫn phục vụ soạn thảo bình thường.
 
 ## Cài đặt và dữ liệu
 
-Ctrl+, mở Cài đặt gồm Glass Tuning, Hướng dẫn sử dụng và About. Ngôn ngữ giao diện hỗ trợ Việt/Anh/Trung. F1 và User Guide trong app hiển thị cùng danh sách phím tắt.
+**Ctrl+,** mở Cài đặt gồm Glass Tuning, Quản lý OUI nhà sản xuất MAC, Hướng dẫn sử dụng và About. Ngôn ngữ giao diện hỗ trợ Việt/Anh/Trung. F1 và User Guide trong app hiển thị cùng danh sách phím tắt và tài liệu hướng dẫn.
 
-Danh sách thiết bị và thông tin đăng nhập đã lưu nằm trong thư mục application support của Windows, thư mục con `JA_Remote`. Thông tin đăng nhập được lưu bằng JSON; bảo vệ quyền truy cập tài khoản Windows và không chia sẻ các tệp này. Nhật ký tác vụ giữ tối đa 500 mục trong bộ nhớ của phiên hiện tại. Log chẩn đoán không thay thế cơ chế lưu audit dài hạn.
+Danh sách thiết bị và thông tin đăng nhập đã lưu nằm trong thư mục application support của Windows, thư mục con `JA_Remote`. Thông tin đăng nhập được lưu bằng JSON; bảo vệ quyền truy cập tài khoản Windows và không chia sẻ các tệp này. Nhật ký tác vụ giữ tối đa 500 mục trong bộ nhớ của phiên hiện tại.
 
 Dùng Xuất/Nhập ở tab Thiết bị để sao lưu/khôi phục cấu hình. Kiểm tra nội dung file xuất trước khi chia sẻ. Gói release không chứa thiết bị, tài khoản, cấu hình hoặc log cá nhân.
 
 ## Xử lý sự cố
 
-- **Offline:** kiểm tra IP/subnet, kết nối LAN, ICMP firewall; Ping thất bại không luôn đồng nghĩa máy đã tắt.
+- **Offline:** kiểm tra IP/subnet, kết nối LAN, ICMP firewall; Ping thất bại không luôn đồng nghĩa máy đã tắt — hãy dùng tính năng **Quét cổng (Port Scanner)** để kiểm tra xem cổng 3389 (RDP) hoặc 5985 (WinRM) có đang phản hồi không.
 - **Lệnh thất bại:** kiểm tra tài khoản, quyền và dịch vụ WinRM/SSH ở máy đích.
-- **Không có đích:** chọn lại thiết bị; Command Runner không tự chuyển sang máy đầu tiên khi đích đã bị xóa.
+- **Lỗi file đang bị chiếm giữ:** kích hoạt tùy chọn *Tự động đóng file/tiến trình đang chạy* trong File Deployer để app tự giải phóng khóa tiến trình trước khi ghi đè.
 - **Thiếu DLL khi chạy:** giải nén toàn bộ ZIP; nếu thiếu Microsoft Visual C++ runtime, cài runtime x64 theo yêu cầu hệ thống.
-- **Palette:** Ctrl+K, nhập từ khóa, ↑/↓, Enter. Esc đóng mà không chạy lệnh.
+- **Palette:** Ctrl+P hoặc Ctrl+K, nhập từ khóa, ↑/↓, Enter. Esc đóng mà không chạy lệnh.
 
 Website: https://jatechvn.github.io/ · Repository: https://github.com/jatechvn/JA_Remote

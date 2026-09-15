@@ -1,7 +1,7 @@
 name: ja_remote
 description: "JA Remote - TE PC Manager for LAN / Factory / Office"
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ^3.12.2

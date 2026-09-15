@@ -7,6 +7,9 @@ class NetworkInterfaceDetails {
   final String subnet;
   final bool isVirtual;
   final bool isPrivateLan;
+  final String? netmask;
+  final int prefixLength;
+  final List<String> subSlices;
 
   const NetworkInterfaceDetails({
     required this.name,
@@ -14,6 +17,9 @@ class NetworkInterfaceDetails {
     required this.subnet,
     required this.isVirtual,
     required this.isPrivateLan,
+    this.netmask,
+    this.prefixLength = 24,
+    this.subSlices = const [],
   });
 
   @override
@@ -91,19 +97,150 @@ class NetworkUtils {
     return false;
   }
 
-  /// Derives /24 CIDR subnet from an IPv4 address (e.g. 172.21.175.40 -> 172.21.175.0/24)
-  static String deriveSubnet(String ip) {
-    final parts = ip.split('.');
-    if (parts.length == 4) {
-      return '${parts[0]}.${parts[1]}.${parts[2]}.0/24';
+  /// Converts a dotted-decimal subnet mask (e.g. 255.255.248.0) to prefix length (e.g. 21).
+  static int maskToPrefixLength(String netmask) {
+    final octets = netmask
+        .trim()
+        .split('.')
+        .map((e) => int.tryParse(e) ?? -1)
+        .toList();
+    if (octets.length != 4 || octets.any((o) => o < 0 || o > 255)) {
+      return 24;
     }
-    return '$ip/24';
+    final maskInt =
+        (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3];
+    int count = 0;
+    for (int i = 31; i >= 0; i--) {
+      if (((maskInt >> i) & 1) == 1) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count > 0 ? count : 24;
+  }
+
+  /// Calculates the exact network CIDR given an IP address and optional subnet mask.
+  /// If netmask is omitted or invalid, defaults to /24.
+  /// Example: 172.21.175.40 with 255.255.248.0 -> 172.21.168.0/21
+  static String calculateCidrSubnet(String ip, [String? netmask]) {
+    final cleanIp = ip.trim();
+    final ipOctets = cleanIp
+        .split('.')
+        .map((e) => int.tryParse(e) ?? -1)
+        .toList();
+    if (ipOctets.length != 4 || ipOctets.any((o) => o < 0 || o > 255)) {
+      return '$cleanIp/24';
+    }
+
+    if (netmask == null || netmask.trim().isEmpty) {
+      return '${ipOctets[0]}.${ipOctets[1]}.${ipOctets[2]}.0/24';
+    }
+
+    final maskOctets = netmask
+        .trim()
+        .split('.')
+        .map((e) => int.tryParse(e) ?? -1)
+        .toList();
+    if (maskOctets.length != 4 || maskOctets.any((o) => o < 0 || o > 255)) {
+      return '${ipOctets[0]}.${ipOctets[1]}.${ipOctets[2]}.0/24';
+    }
+
+    final ipInt =
+        (ipOctets[0] << 24) |
+        (ipOctets[1] << 16) |
+        (ipOctets[2] << 8) |
+        ipOctets[3];
+    final maskInt =
+        (maskOctets[0] << 24) |
+        (maskOctets[1] << 16) |
+        (maskOctets[2] << 8) |
+        maskOctets[3];
+    final prefixLen = maskToPrefixLength(netmask);
+
+    final networkInt = ipInt & maskInt;
+    final o1 = (networkInt >> 24) & 0xFF;
+    final o2 = (networkInt >> 16) & 0xFF;
+    final o3 = (networkInt >> 8) & 0xFF;
+    final o4 = networkInt & 0xFF;
+
+    return '$o1.$o2.$o3.$o4/$prefixLen';
+  }
+
+  /// Derives CIDR subnet from an IPv4 address and optional subnet mask.
+  /// Defaults to /24 if netmask is omitted for backward compatibility.
+  static String deriveSubnet(String ip, [String? netmask]) {
+    return calculateCidrSubnet(ip, netmask);
+  }
+
+  /// For supernets with prefix length < 24 (e.g. 172.21.168.0/21),
+  /// generates the list of constituent /24 subnets.
+  /// Example: 172.21.168.0/21 -> [172.21.168.0/24, ..., 172.21.175.0/24]
+  static List<String> getSubnetSlices(String cidr) {
+    final clean = cidr.trim();
+    if (!clean.contains('/')) return [clean];
+    final parts = clean.split('/');
+    final ip = parts[0].trim();
+    final prefix = int.tryParse(parts[1].trim()) ?? 24;
+
+    if (prefix >= 24) {
+      return [clean];
+    }
+    // Limit slicing down to /16 at most (256 slices max)
+    if (prefix < 16) {
+      return [clean];
+    }
+
+    final octets = ip.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    if (octets.length != 4) return [clean];
+
+    final ipInt =
+        (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3];
+    final mask = prefix == 0 ? 0 : (~0 << (32 - prefix)) & 0xFFFFFFFF;
+    final networkInt = ipInt & mask;
+    final numSlices = 1 << (24 - prefix); // e.g. /21 -> 1 << 3 = 8 slices
+
+    final List<String> slices = [];
+    for (int i = 0; i < numSlices; i++) {
+      final sliceNetworkInt = networkInt + (i << 8);
+      final o1 = (sliceNetworkInt >> 24) & 0xFF;
+      final o2 = (sliceNetworkInt >> 16) & 0xFF;
+      final o3 = (sliceNetworkInt >> 8) & 0xFF;
+      slices.add('$o1.$o2.$o3.0/24');
+    }
+    return slices;
+  }
+
+  /// Fast helper to read actual IPv4 Subnet Masks from Windows network stack.
+  static Future<Map<String, String>> _getWindowsSubnetMasks() async {
+    final Map<String, String> map = {};
+    if (!Platform.isWindows) return map;
+
+    try {
+      final res = await Process.run('ipconfig', [], runInShell: false);
+      if (res.exitCode == 0) {
+        final text = res.stdout.toString();
+        // Regex matches an IPv4 followed by a Subnet Mask (255.x.x.x) within 250 characters
+        final blockRegex = RegExp(
+          r'(\d{1,3}(?:\.\d{1,3}){3})[\s\S]{1,250}?(255\.\d{1,3}\.\d{1,3}\.\d{1,3})',
+        );
+        for (final match in blockRegex.allMatches(text)) {
+          final ip = match.group(1)!;
+          final mask = match.group(2)!;
+          if (!map.containsKey(ip) && isValidIp(ip) && !ip.startsWith('255.')) {
+            map[ip] = mask;
+          }
+        }
+      }
+    } catch (_) {}
+    return map;
   }
 
   /// Lists all active network adapters on the host machine, classified by type.
   static Future<List<NetworkInterfaceDetails>> getAvailableAdapters() async {
     final List<NetworkInterfaceDetails> list = [];
     try {
+      final netmasks = await _getWindowsSubnetMasks();
       final interfaces = await NetworkInterface.list(
         includeLoopback: false,
         type: InternetAddressType.IPv4,
@@ -118,14 +255,21 @@ class NetworkUtils {
 
           final isVirtual = isVirtualAdapter(iface.name, ip);
           final isLan = isPrivateLanIp(ip);
+          final mask = netmasks[ip];
+          final subnet = deriveSubnet(ip, mask);
+          final prefix = mask != null ? maskToPrefixLength(mask) : 24;
+          final slices = getSubnetSlices(subnet);
 
           list.add(
             NetworkInterfaceDetails(
               name: iface.name,
               ip: ip,
-              subnet: deriveSubnet(ip),
+              subnet: subnet,
               isVirtual: isVirtual,
               isPrivateLan: isLan,
+              netmask: mask,
+              prefixLength: prefix,
+              subSlices: slices,
             ),
           );
         }
@@ -177,6 +321,23 @@ class NetworkUtils {
     return adapters.map((a) => a.ip).toList();
   }
 
+  /// Returns all IPv4 addresses assigned to this host machine (physical, virtual, and loopback).
+  static Future<Set<String>> getHostDeviceIps() async {
+    final Set<String> ips = {'127.0.0.1', 'localhost'};
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: true,
+        type: InternetAddressType.IPv4,
+      );
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          ips.add(addr.address);
+        }
+      }
+    } catch (_) {}
+    return ips;
+  }
+
   /// Expands a CIDR subnet (e.g. 172.19.116.0/24) into a list of host IP addresses.
   static List<String> expandSubnet(String cidr) {
     final clean = cidr.trim();
@@ -204,7 +365,7 @@ class NetworkUtils {
     final end = broadcastInt - 1;
 
     final limit = end - start + 1;
-    final maxHosts = limit > 1024 ? 1024 : limit;
+    final maxHosts = limit > 4096 ? 4096 : limit;
 
     for (int i = 0; i < maxHosts; i++) {
       final cur = start + i;
@@ -240,5 +401,19 @@ class NetworkUtils {
       }
     } catch (_) {}
     return '255.255.255.255';
+  }
+
+  /// Compares two IPv4 addresses numerically.
+  /// Example: 172.21.168.2 comes before 172.21.168.10.
+  static int compareIps(String ipA, String ipB) {
+    final aParts = ipA.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final bParts = ipB.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    if (aParts.length == 4 && bParts.length == 4) {
+      for (var i = 0; i < 4; i++) {
+        final diff = aParts[i].compareTo(bParts[i]);
+        if (diff != 0) return diff;
+      }
+    }
+    return ipA.compareTo(ipB);
   }
 }

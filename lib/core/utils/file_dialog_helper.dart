@@ -74,4 +74,75 @@ if (\$d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       return null;
     }
   }
+
+  /// Opens a native Windows Open File dialog with customizable filter and title.
+  static Future<String?> pickAnyFile({
+    String filter = 'All Files (*.*)|*.*',
+    String title = 'Chọn file để truyền',
+  }) async {
+    if (!Platform.isWindows) return null;
+
+    final script =
+        '''
+Add-Type -AssemblyName System.Windows.Forms
+\$d = New-Object System.Windows.Forms.OpenFileDialog
+\$d.Title = '$title'
+\$d.Filter = '$filter'
+\$d.InitialDirectory = [Environment]::GetFolderPath('Desktop')
+if (\$d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output \$d.FileName
+}
+''';
+
+    try {
+      final encoded = ProcessRunner.toEncodedCommand(script);
+      final res = await Process.run('powershell.exe', [
+        '-Sta',
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-EncodedCommand',
+        encoded,
+      ]);
+      final out = res.stdout.toString().trim();
+      return out.isNotEmpty ? out : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Opens a native Windows Folder Browser dialog and returns the selected path, or null if cancelled.
+  static Future<String?> pickDirectory({
+    String title = 'Chọn thư mục để truyền',
+  }) async {
+    if (!Platform.isWindows) return null;
+
+    final script =
+        '''
+Add-Type -AssemblyName System.Windows.Forms
+\$d = New-Object System.Windows.Forms.FolderBrowserDialog
+\$d.Description = '$title'
+\$d.ShowNewFolderButton = \$true
+\$d.SelectedPath = [Environment]::GetFolderPath('Desktop')
+if (\$d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output \$d.SelectedPath
+}
+''';
+
+    try {
+      final encoded = ProcessRunner.toEncodedCommand(script);
+      final res = await Process.run('powershell.exe', [
+        '-Sta',
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-EncodedCommand',
+        encoded,
+      ]);
+      final out = res.stdout.toString().trim();
+      return out.isNotEmpty ? out : null;
+    } catch (_) {
+      return null;
+    }
+  }
 }
