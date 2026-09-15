@@ -1,3 +1,4 @@
+import '../../widgets/route_shortcuts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,13 +13,16 @@ import '../../services/power_service.dart';
 import '../../services/tool_launcher_service.dart';
 import '../../services/config_backup_service.dart';
 import '../../core/utils/file_dialog_helper.dart';
+import '../../core/network/network_utils.dart';
+import '../../widgets/glass_search_history_field.dart';
 import 'device_detail_dialog.dart';
 import 'add_device_dialog.dart';
 
 class DevicesView extends StatefulWidget {
   final Function(int tabIndex)? onNavigateTab;
+  final bool isActive;
 
-  const DevicesView({super.key, this.onNavigateTab});
+  const DevicesView({super.key, this.onNavigateTab, this.isActive = false});
 
   @override
   State<DevicesView> createState() => _DevicesViewState();
@@ -27,12 +31,28 @@ class DevicesView extends StatefulWidget {
 class _DevicesViewState extends State<DevicesView> {
   final _searchFocus = FocusNode();
   late final TextEditingController _searchController;
+
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController(
       text: context.read<DeviceService>().searchQuery,
     );
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DevicesView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
   }
 
   @override
@@ -42,15 +62,71 @@ class _DevicesViewState extends State<DevicesView> {
     super.dispose();
   }
 
+  void _onSort(String column) {
+    context.read<DeviceService>().setSort(column);
+  }
+
+  List<ManagedDevice> _getSortedDevices(
+    List<ManagedDevice> devices,
+    DeviceService service,
+  ) {
+    final list = List<ManagedDevice>.of(devices);
+    final sortCol = service.sortColumn;
+    final sortAsc = service.sortAscending;
+    list.sort((a, b) {
+      int cmp = 0;
+      switch (sortCol) {
+        case 'name':
+          final aName = a.name.isNotEmpty ? a.name : a.hostname;
+          final bName = b.name.isNotEmpty ? b.name : b.hostname;
+          cmp = aName.toLowerCase().compareTo(bName.toLowerCase());
+          break;
+        case 'ip':
+          cmp = NetworkUtils.compareIps(a.ip, b.ip);
+          break;
+        case 'mac':
+          final aMac = a.mac ?? '';
+          final bMac = b.mac ?? '';
+          cmp = aMac.toLowerCase().compareTo(bMac.toLowerCase());
+          break;
+        case 'ping':
+          if (a.pingMs == null && b.pingMs == null) {
+            cmp = 0;
+          } else if (a.pingMs == null) {
+            return 1;
+          } else if (b.pingMs == null) {
+            return -1;
+          } else {
+            final res = a.pingMs!.compareTo(b.pingMs!);
+            return sortAsc ? res : -res;
+          }
+          break;
+        case 'status':
+          final aVal = a.online ? 1 : 0;
+          final bVal = b.online ? 1 : 0;
+          cmp = bVal.compareTo(aVal); // Online first
+          if (cmp == 0) {
+            cmp = NetworkUtils.compareIps(a.ip, b.ip);
+          }
+          break;
+        default:
+          cmp = NetworkUtils.compareIps(a.ip, b.ip);
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
     final colors = theme.colors;
     final deviceService = context.watch<DeviceService>();
-    final devices = deviceService.filteredDevices;
+    final rawDevices = deviceService.filteredDevices;
+    final devices = _getSortedDevices(rawDevices, deviceService);
     final selectedCount = deviceService.selectedIds.length;
 
-    return CallbackShortcuts(
+    return RouteShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _searchFocus.requestFocus,
@@ -124,47 +200,68 @@ class _DevicesViewState extends State<DevicesView> {
     dynamic colors,
   ) {
     final language = context.watch<LanguageProvider>();
+    final filteredCount = service.filteredDevices.length;
+    final totalCount = service.totalCount;
+    final onlineCount = service.onlineCount;
+    final isFiltered =
+        service.searchQuery.trim().isNotEmpty ||
+        service.selectedGroup != 'All' ||
+        service.statusFilter != 'All';
 
     return GlassCard(
       colors: colors,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          // Search box
+          // Search box with history suggestions
           Expanded(
             flex: 3,
-            child: SizedBox(
+            child: GlassSearchHistoryField(
+              controller: _searchController,
+              focusNode: _searchFocus,
+              category: 'devices',
+              hintText: language.t('dev_search_hint'),
               height: 36,
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocus,
-                onChanged: service.setSearchQuery,
-                style: TextStyle(fontSize: 13, color: colors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: language.t('dev_search_hint'),
-                  hintStyle: TextStyle(fontSize: 12, color: colors.textMuted),
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    size: 18,
-                    color: colors.textMuted,
-                  ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  filled: true,
-                  fillColor: colors.cardBg,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: colors.cardBorder),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: colors.cardBorder),
-                  ),
-                ),
-              ),
+              fontSize: 13,
+              hintFontSize: 12,
+              borderRadius: 8,
+              suffixBadge: service.searchQuery.trim().isNotEmpty
+                  ? Container(
+                      margin: const EdgeInsets.only(right: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.accentCyan.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: colors.accentCyan.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Text(
+                        '$filteredCount',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.bold,
+                          color: colors.accentCyan,
+                        ),
+                      ),
+                    )
+                  : null,
+              onChanged: (val) {
+                service.setSearchQuery(val);
+                setState(() {});
+              },
+              onSubmitted: (val) {
+                service.setSearchQuery(val);
+                setState(() {});
+              },
+              onClear: () {
+                service.setSearchQuery('');
+                setState(() {});
+              },
             ),
           ),
           const SizedBox(width: 10),
@@ -194,6 +291,52 @@ class _DevicesViewState extends State<DevicesView> {
 
           // Status Filter Buttons (All, Online, Offline)
           _buildStatusToggle(service, colors, language),
+          const SizedBox(width: 8),
+
+          // Count / Filter Indicator Chip
+          Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: colors.cardBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isFiltered
+                    ? colors.accentCyan.withValues(alpha: 0.4)
+                    : colors.cardBorder,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isFiltered ? Icons.filter_alt_rounded : Icons.devices_rounded,
+                  size: 14,
+                  color: isFiltered ? colors.accentCyan : colors.textMuted,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isFiltered
+                      ? language.t('dev_count_filtered', {
+                          'filtered': filteredCount.toString(),
+                          'total': totalCount.toString(),
+                        })
+                      : language.t('dev_count_all', {
+                          'count': totalCount.toString(),
+                          'online': onlineCount.toString(),
+                        }),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: isFiltered ? FontWeight.bold : FontWeight.w500,
+                    color: isFiltered
+                        ? colors.accentCyan
+                        : colors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const Spacer(),
 
           // Auto Polling indicator / toggle
@@ -338,6 +481,7 @@ class _DevicesViewState extends State<DevicesView> {
             language.t('dev_import_preview_msg', {
               'count': preview.deviceCount.toString(),
               'creds': preview.credentialCount.toString(),
+              'templates': preview.templateCount.toString(),
             }),
             style: const TextStyle(fontSize: 12),
           ),
@@ -351,15 +495,33 @@ class _DevicesViewState extends State<DevicesView> {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: preview.devices.take(4).map((d) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text(
-                    '• ${d.name} (${d.ip}) [${d.group}]',
-                    style: TextStyle(fontSize: 11, color: colors.textSecondary),
+              children: [
+                if (preview.devices.isNotEmpty)
+                  ...preview.devices.take(4).map((d) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        '• ${d.name} (${d.ip}) [${d.group}]',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    );
+                  }),
+                if (preview.commandTemplates.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      '• ${preview.commandTemplates.length} kịch bản lệnh mẫu (${preview.commandTemplates.take(2).map((t) => t.name).join(', ')}${preview.commandTemplates.length > 2 ? '...' : ''})',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.accentCyan,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                );
-              }).toList(),
+              ],
             ),
           ),
         ],
@@ -468,6 +630,59 @@ class _DevicesViewState extends State<DevicesView> {
     );
   }
 
+  Widget _buildSortHeader({
+    required String title,
+    required String columnKey,
+    required dynamic colors,
+    required DeviceService service,
+    int? flex,
+    double? width,
+  }) {
+    final isActive = service.sortColumn == columnKey;
+    final content = InkWell(
+      onTap: () => _onSort(columnKey),
+      borderRadius: BorderRadius.circular(4),
+      hoverColor: colors.accentCyan.withValues(alpha: 0.1),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isActive ? colors.accentCyan : colors.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              isActive
+                  ? (service.sortAscending
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded)
+                  : Icons.unfold_more_rounded,
+              size: 13,
+              color: isActive
+                  ? colors.accentCyan
+                  : colors.textMuted.withValues(alpha: 0.45),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (width != null) {
+      return SizedBox(width: width, child: content);
+    }
+    return Expanded(flex: flex ?? 1, child: content);
+  }
+
   Widget _buildDeviceList(
     BuildContext context,
     DeviceService service,
@@ -503,58 +718,43 @@ class _DevicesViewState extends State<DevicesView> {
                 activeColor: colors.accentCyan,
               ),
               const SizedBox(width: 8),
-              Expanded(
+              _buildSortHeader(
+                title: '${language.t('dev_col_name')} (${devices.length})',
+                columnKey: 'name',
                 flex: 3,
-                child: Text(
-                  language.t('dev_col_name'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                colors: colors,
+                service: service,
               ),
-              Expanded(
+              _buildSortHeader(
+                title: language.t('dev_col_ip'),
+                columnKey: 'ip',
                 flex: 2,
-                child: Text(
-                  language.t('dev_col_ip'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                colors: colors,
+                service: service,
               ),
-              Expanded(
+              _buildSortHeader(
+                title: language.t('dev_col_mac'),
+                columnKey: 'mac',
                 flex: 2,
-                child: Text(
-                  language.t('dev_col_mac'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                colors: colors,
+                service: service,
               ),
-              Expanded(
+              _buildSortHeader(
+                title: language.t('dev_col_ping'),
+                columnKey: 'ping',
                 flex: 1,
-                child: Text(
-                  language.t('dev_col_ping'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                colors: colors,
+                service: service,
               ),
-              Expanded(
+              _buildSortHeader(
+                title: language.t('dev_col_status'),
+                columnKey: 'status',
                 flex: 2,
-                child: Text(
-                  language.t('dev_col_status'),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                colors: colors,
+                service: service,
               ),
               SizedBox(
-                width: 140,
+                width: 144,
                 child: Text(
                   language.t('dev_col_actions'),
                   textAlign: TextAlign.right,
@@ -722,6 +922,16 @@ class _DevicesViewState extends State<DevicesView> {
                       onTap: () => widget.onNavigateTab?.call(
                         2,
                       ), // Switch to Command Runner Tab
+                    ),
+                    const SizedBox(width: 6),
+                    GlassButton(
+                      label: language.t('dev_batch_deploy'),
+                      icon: Icons.drive_folder_upload_rounded,
+                      colors: colors,
+                      accentColor: colors.accentCyan,
+                      onTap: () => widget.onNavigateTab?.call(
+                        3,
+                      ), // Switch to File Deploy Tab
                     ),
                     const SizedBox(width: 6),
                   ],
@@ -1272,7 +1482,7 @@ class _DeviceRow extends StatelessWidget {
 
             // Actions
             SizedBox(
-              width: 140,
+              width: 144,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [

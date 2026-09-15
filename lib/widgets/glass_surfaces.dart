@@ -28,11 +28,17 @@ class GlassContainer extends StatelessWidget {
     } catch (_) {}
 
     final effectiveBlur = blurSigma ?? theme?.cardBlur ?? 24.0;
+    final effectiveOpacity = theme?.cardOpacity;
+    final effectiveBg =
+        backgroundColor ??
+        (effectiveOpacity != null
+            ? colors.glassBg.withValues(alpha: effectiveOpacity)
+            : colors.glassBg);
 
     Widget content = Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: backgroundColor ?? colors.glassBg,
+        color: effectiveBg,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(color: borderColor ?? colors.glassBorder),
         boxShadow: [
@@ -234,7 +240,7 @@ class BentoCard extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: content,
+      child: RepaintBoundary(child: content),
     );
   }
 }

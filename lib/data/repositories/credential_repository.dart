@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import '../../core/utils/app_storage.dart';
 import '../models/saved_credential.dart';
 
 /// Repository managing persistent history of recently used and saved credentials.
@@ -13,17 +12,21 @@ class CredentialRepository {
 
   List<SavedCredential> _cachedCredentials = [];
   bool _isInitialized = false;
+  File? _customStorageFile;
 
   List<SavedCredential> get credentials =>
       List.unmodifiable(_cachedCredentials);
 
+  /// Allows unit tests to redirect JSON storage to a temporary file.
+  void setStorageFileForTesting(File? file) {
+    _customStorageFile = file;
+    _isInitialized = false;
+    _cachedCredentials.clear();
+  }
+
   Future<File> _getStorageFile() async {
-    final dir = await getApplicationSupportDirectory();
-    final dataDir = Directory(p.join(dir.path, 'JA_Remote'));
-    if (!await dataDir.exists()) {
-      await dataDir.create(recursive: true);
-    }
-    return File(p.join(dataDir.path, 'credentials.json'));
+    if (_customStorageFile != null) return _customStorageFile!;
+    return AppStorage.getFile('credentials.json');
   }
 
   /// Loads credentials from persistent storage.

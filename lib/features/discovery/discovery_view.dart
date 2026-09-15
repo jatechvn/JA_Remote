@@ -1,18 +1,22 @@
+import '../../widgets/route_shortcuts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../theme/theme_provider.dart';
 import '../../theme/language_provider.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/glass_search_history_field.dart';
 import '../../widgets/app_toast.dart';
 import '../../services/discovery_service.dart';
 import '../../services/device_service.dart';
 import '../../core/network/network_utils.dart';
+import '../../core/network/mac_oui_resolver.dart';
 import '../../core/utils/everything_search_matcher.dart';
 import '../../data/models/managed_device.dart';
 
 class DiscoveryView extends StatefulWidget {
-  const DiscoveryView({super.key});
+  final bool isActive;
+  const DiscoveryView({super.key, this.isActive = false});
 
   @override
   State<DiscoveryView> createState() => _DiscoveryViewState();
@@ -21,16 +25,29 @@ class DiscoveryView extends StatefulWidget {
 class _DiscoveryViewState extends State<DiscoveryView> {
   late TextEditingController _subnetController;
   late TextEditingController _searchController;
-  String _filterMode = 'all'; // 'all', 'unadded', 'added', 'fast'
-  String _viewMode = 'table'; // 'table', 'grid', 'list'
-  bool _showAdapters = false;
-  final Set<String> _selectedIps = {};
+  final _searchFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _subnetController = TextEditingController();
-    _searchController = TextEditingController();
+    final discovery = context.read<DiscoveryService>();
+    _subnetController = TextEditingController(text: discovery.currentSubnet);
+    _searchController = TextEditingController(text: discovery.searchQuery);
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DiscoveryView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
   }
 
   @override
@@ -41,7 +58,106 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     super.dispose();
   }
 
-  final _searchFocus = FocusNode();
+  void _onSort(String column) {
+    context.read<DiscoveryService>().setSort(column);
+  }
+
+  List<ManagedDevice> _getSortedDiscoveredItems(
+    List<ManagedDevice> items,
+    DiscoveryService discovery,
+  ) {
+    final list = List<ManagedDevice>.of(items);
+    final sortCol = discovery.sortColumn;
+    final sortAsc = discovery.sortAscending;
+    list.sort((a, b) {
+      int cmp = 0;
+      switch (sortCol) {
+        case 'device':
+          final aName = a.name.isNotEmpty ? a.name : a.hostname;
+          final bName = b.name.isNotEmpty ? b.name : b.hostname;
+          cmp = aName.toLowerCase().compareTo(bName.toLowerCase());
+          break;
+        case 'ip':
+          cmp = NetworkUtils.compareIps(a.ip, b.ip);
+          break;
+        case 'mac':
+          final aMac = a.mac ?? '';
+          final bMac = b.mac ?? '';
+          cmp = aMac.toLowerCase().compareTo(bMac.toLowerCase());
+          break;
+        case 'ping':
+          if (a.pingMs == null && b.pingMs == null) {
+            cmp = 0;
+          } else if (a.pingMs == null) {
+            return 1;
+          } else if (b.pingMs == null) {
+            return -1;
+          } else {
+            final res = a.pingMs!.compareTo(b.pingMs!);
+            return sortAsc ? res : -res;
+          }
+          break;
+        default:
+          cmp = NetworkUtils.compareIps(a.ip, b.ip);
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+    return list;
+  }
+
+  Widget _buildSortHeader({
+    required String title,
+    required String columnKey,
+    required dynamic colors,
+    required DiscoveryService discovery,
+    int? flex,
+    double? width,
+  }) {
+    final isActive = discovery.sortColumn == columnKey;
+    final content = InkWell(
+      onTap: () => _onSort(columnKey),
+      borderRadius: BorderRadius.circular(4),
+      hoverColor: colors.accentCyan.withValues(alpha: 0.1),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.bold,
+                  color: isActive ? colors.accentCyan : colors.textMuted,
+                ),
+              ),
+            ),
+            const SizedBox(width: 3),
+            Icon(
+              isActive
+                  ? (discovery.sortAscending
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded)
+                  : Icons.unfold_more_rounded,
+              size: 12,
+              color: isActive
+                  ? colors.accentCyan
+                  : colors.textMuted.withValues(alpha: 0.45),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (width != null) {
+      return SizedBox(width: width, child: content);
+    }
+    return Expanded(flex: flex ?? 1, child: content);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
@@ -54,16 +170,31 @@ class _DiscoveryViewState extends State<DiscoveryView> {
       _subnetController.text = discovery.currentSubnet;
     }
 
+    if (!_searchFocus.hasFocus &&
+        _searchController.text != discovery.searchQuery) {
+      _searchController.text = discovery.searchQuery;
+    }
+
     final isScanning = discovery.isScanning;
     final allDiscovered = discovery.discoveredDevices;
     final adapters = discovery.availableAdapters;
+    final showAdapters = discovery.showAdapters;
+    final filterMode = discovery.filterMode;
+    final selectedIps = discovery.selectedIps;
 
     final savedIps = deviceService.devices.map((d) => d.ip).toSet();
-    final query = _searchController.text.trim();
+    final query = discovery.searchQuery.trim();
 
     // Clean up selected IPs that no longer exist in discovered devices
-    final discoveredIps = allDiscovered.map((d) => d.ip).toSet();
-    _selectedIps.removeWhere((ip) => !discoveredIps.contains(ip));
+    if (allDiscovered.isNotEmpty) {
+      final discoveredIps = allDiscovered.map((d) => d.ip).toSet();
+      final staleSelectedIps = selectedIps.difference(discoveredIps);
+      if (staleSelectedIps.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          discovery.removeSelectedIps(staleSelectedIps);
+        });
+      }
+    }
 
     final unaddedCount = allDiscovered
         .where((d) => !savedIps.contains(d.ip))
@@ -75,10 +206,10 @@ class _DiscoveryViewState extends State<DiscoveryView> {
         .where((d) => d.pingMs != null && d.pingMs! <= 50)
         .length;
 
-    final filteredItems = allDiscovered.where((dev) {
+    final rawFiltered = allDiscovered.where((dev) {
       final isAlreadyAdded = savedIps.contains(dev.ip);
 
-      switch (_filterMode) {
+      switch (filterMode) {
         case 'unadded':
           if (isAlreadyAdded) return false;
           break;
@@ -96,7 +227,13 @@ class _DiscoveryViewState extends State<DiscoveryView> {
       if (query.isNotEmpty) {
         if (!EverythingSearchMatcher.matches(
           query: query,
-          targets: [dev.name, dev.ip, dev.hostname, dev.mac],
+          targets: [
+            dev.name,
+            dev.ip,
+            dev.hostname,
+            dev.mac,
+            MacOuiResolver.lookup(dev.mac),
+          ],
         )) {
           return false;
         }
@@ -105,16 +242,18 @@ class _DiscoveryViewState extends State<DiscoveryView> {
       return true;
     }).toList();
 
+    final filteredItems = _getSortedDiscoveredItems(rawFiltered, discovery);
+
     // Check if all unadded filtered items are selected
     final unaddedFiltered = filteredItems
         .where((d) => !savedIps.contains(d.ip))
         .toList();
     final isAllFilteredSelected =
         unaddedFiltered.isNotEmpty &&
-        unaddedFiltered.every((d) => _selectedIps.contains(d.ip));
-    final selectedCount = _selectedIps.length;
+        unaddedFiltered.every((d) => selectedIps.contains(d.ip));
+    final selectedCount = selectedIps.length;
 
-    return CallbackShortcuts(
+    return RouteShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _searchFocus.requestFocus,
@@ -157,6 +296,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                         height: 32,
                         child: TextField(
                           controller: _subnetController,
+                          onChanged: discovery.setSubnet,
                           enabled: !isScanning,
                           style: TextStyle(
                             fontSize: 12,
@@ -274,19 +414,18 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                       if (adapters.isNotEmpty) ...[
                         const SizedBox(width: 8),
                         InkWell(
-                          onTap: () =>
-                              setState(() => _showAdapters = !_showAdapters),
+                          onTap: () => discovery.toggleShowAdapters(),
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
                             height: 32,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             decoration: BoxDecoration(
-                              color: _showAdapters
+                              color: showAdapters
                                   ? colors.accentCyan.withValues(alpha: 0.18)
                                   : colors.cardBg,
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: _showAdapters
+                                color: showAdapters
                                     ? colors.accentCyan
                                     : colors.borderDefault,
                               ),
@@ -297,7 +436,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                                 Icon(
                                   Icons.settings_ethernet_rounded,
                                   size: 14,
-                                  color: _showAdapters
+                                  color: showAdapters
                                       ? colors.accentCyan
                                       : colors.textMuted,
                                 ),
@@ -308,21 +447,21 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                                   }),
                                   style: TextStyle(
                                     fontSize: 11,
-                                    fontWeight: _showAdapters
+                                    fontWeight: showAdapters
                                         ? FontWeight.bold
                                         : FontWeight.w500,
-                                    color: _showAdapters
+                                    color: showAdapters
                                         ? colors.accentCyan
                                         : colors.textSecondary,
                                   ),
                                 ),
                                 const SizedBox(width: 4),
                                 Icon(
-                                  _showAdapters
+                                  showAdapters
                                       ? Icons.keyboard_arrow_up_rounded
                                       : Icons.keyboard_arrow_down_rounded,
                                   size: 15,
-                                  color: _showAdapters
+                                  color: showAdapters
                                       ? colors.accentCyan
                                       : colors.textMuted,
                                 ),
@@ -380,100 +519,194 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                   ),
 
                   // Collapsible Adapters list
-                  if (_showAdapters && adapters.isNotEmpty) ...[
+                  if (showAdapters && adapters.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
+                    GlassHorizontalScrollView(
+                      colors: colors,
                       child: Row(
-                        children: adapters.map((adapter) {
-                          final isSelected =
-                              _subnetController.text.trim() == adapter.subnet;
-                          final isVirtual = adapter.isVirtual;
-
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: InkWell(
-                              onTap: () {
-                                setState(() {
-                                  _subnetController.text = adapter.subnet;
-                                });
-                                discovery.setSubnet(adapter.subnet);
-                              },
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? colors.accentCyan.withValues(alpha: 0.2)
-                                      : colors.cardBg,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? colors.accentCyan
-                                        : colors.borderDefault,
+                        children: [
+                          for (final adapter in adapters) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _subnetController.text = adapter.subnet;
+                                  });
+                                  discovery.setSubnet(adapter.subnet);
+                                },
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
                                   ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      isVirtual
-                                          ? Icons.cloud_queue_rounded
-                                          : Icons.settings_ethernet_rounded,
-                                      size: 12,
-                                      color: isSelected
-                                          ? colors.accentCyan
-                                          : (isVirtual
-                                                ? colors.accentAmber
-                                                : colors.accentEmerald),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${adapter.name}: ${adapter.subnet}',
-                                      style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: isSelected
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        color: isSelected
-                                            ? colors.accentCyan
-                                            : colors.textPrimary,
-                                      ),
-                                    ),
-                                    if (isVirtual) ...[
-                                      const SizedBox(width: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 3,
-                                          vertical: 1,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: colors.accentAmber.withValues(
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _subnetController.text.trim() ==
+                                            adapter.subnet
+                                        ? colors.accentCyan.withValues(
                                             alpha: 0.2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            3,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'VPN',
-                                          style: TextStyle(
-                                            fontSize: 8,
-                                            color: Colors.amber,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                          )
+                                        : colors.cardBg,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color:
+                                          _subnetController.text.trim() ==
+                                              adapter.subnet
+                                          ? colors.accentCyan
+                                          : colors.borderDefault,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        adapter.isVirtual
+                                            ? Icons.cloud_queue_rounded
+                                            : Icons.settings_ethernet_rounded,
+                                        size: 12,
+                                        color:
+                                            _subnetController.text.trim() ==
+                                                adapter.subnet
+                                            ? colors.accentCyan
+                                            : (adapter.isVirtual
+                                                  ? colors.accentAmber
+                                                  : colors.accentEmerald),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${adapter.name}: ${adapter.subnet}',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight:
+                                              _subnetController.text.trim() ==
+                                                  adapter.subnet
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color:
+                                              _subnetController.text.trim() ==
+                                                  adapter.subnet
+                                              ? colors.accentCyan
+                                              : colors.textPrimary,
                                         ),
                                       ),
+                                      if (adapter.prefixLength < 24) ...[
+                                        const SizedBox(width: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: colors.accentCyan.withValues(
+                                              alpha: 0.2,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              3,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '/${adapter.prefixLength} Supernet',
+                                            style: TextStyle(
+                                              fontSize: 8.5,
+                                              color: colors.accentCyan,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      if (adapter.isVirtual) ...[
+                                        const SizedBox(width: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 3,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: colors.accentAmber
+                                                .withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(
+                                              3,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'VPN',
+                                            style: TextStyle(
+                                              fontSize: 8,
+                                              color: Colors.amber,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
-                          );
-                        }).toList(),
+                            // Quick chips for subnets if supernet
+                            if (adapter.subSlices.length > 1) ...[
+                              for (final slice in adapter.subSlices) ...[
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _subnetController.text = slice;
+                                      });
+                                      discovery.setSubnet(slice);
+                                    },
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            _subnetController.text.trim() ==
+                                                slice
+                                            ? colors.accentCyan.withValues(
+                                                alpha: 0.25,
+                                              )
+                                            : colors.cardBg,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color:
+                                              _subnetController.text.trim() ==
+                                                  slice
+                                              ? colors.accentCyan
+                                              : colors.borderDefault,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        slice.contains('.')
+                                            ? '.${slice.split('.')[2]}.0/24'
+                                            : slice,
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontFamily: 'monospace',
+                                          fontWeight:
+                                              _subnetController.text.trim() ==
+                                                  slice
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
+                                          color:
+                                              _subnetController.text.trim() ==
+                                                  slice
+                                              ? colors.accentCyan
+                                              : colors.textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 6),
+                            ],
+                          ],
+                        ],
                       ),
                     ),
                   ],
@@ -494,41 +727,44 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                     _buildMergedControlBar(
                       colors: colors,
                       language: language,
+                      discovery: discovery,
                       allCount: allDiscovered.length,
+                      filteredCount: filteredItems.length,
                       unaddedCount: unaddedCount,
+                      unaddedFilteredCount: unaddedFiltered.length,
                       addedCount: addedCount,
                       fastCount: fastCount,
                       selectedCount: selectedCount,
                       isAllSelected: isAllFilteredSelected,
                       hasUnaddedFiltered: unaddedFiltered.isNotEmpty,
                       onToggleSelectAll: () {
-                        setState(() {
-                          if (isAllFilteredSelected) {
-                            for (final d in unaddedFiltered) {
-                              _selectedIps.remove(d.ip);
-                            }
-                          } else {
-                            for (final d in unaddedFiltered) {
-                              _selectedIps.add(d.ip);
-                            }
-                          }
-                        });
+                        if (isAllFilteredSelected) {
+                          discovery.removeSelectedIps(
+                            unaddedFiltered.map((d) => d.ip),
+                          );
+                        } else {
+                          discovery.selectAllIps(
+                            unaddedFiltered.map((d) => d.ip),
+                          );
+                        }
                       },
                       onAddSelected: selectedCount > 0
                           ? () => _addSelectedDevices(
                               colors: colors,
                               language: language,
                               deviceService: deviceService,
+                              discovery: discovery,
                               allDiscovered: allDiscovered,
                               savedIps: savedIps,
                             )
                           : null,
-                      onAddAllUnadded: unaddedCount > 0
+                      onAddAllUnadded: unaddedFiltered.isNotEmpty
                           ? () => _addAllUnaddedDevices(
                               colors: colors,
                               language: language,
                               deviceService: deviceService,
-                              items: allDiscovered,
+                              discovery: discovery,
+                              items: unaddedFiltered,
                               savedIps: savedIps,
                             )
                           : null,
@@ -544,13 +780,14 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                               language,
                             )
                           : filteredItems.isEmpty
-                          ? _buildEmptyFilterMatch(colors, language)
+                          ? _buildEmptyFilterMatch(colors, language, discovery)
                           : _buildDiscoveredContent(
                               items: filteredItems,
                               savedIps: savedIps,
                               colors: colors,
                               language: language,
                               deviceService: deviceService,
+                              discovery: discovery,
                               unaddedFiltered: unaddedFiltered,
                               isAllFilteredSelected: isAllFilteredSelected,
                             ),
@@ -568,8 +805,11 @@ class _DiscoveryViewState extends State<DiscoveryView> {
   Widget _buildMergedControlBar({
     required dynamic colors,
     required LanguageProvider language,
+    required DiscoveryService discovery,
     required int allCount,
+    required int filteredCount,
     required int unaddedCount,
+    required int unaddedFilteredCount,
     required int addedCount,
     required int fastCount,
     required int selectedCount,
@@ -579,13 +819,15 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required VoidCallback? onAddSelected,
     required VoidCallback? onAddAllUnadded,
   }) {
+    final isFiltered = filteredCount != allCount;
+
     return Row(
       children: [
         // Hosts Count Title
         Icon(Icons.devices_other_rounded, color: colors.accentCyan, size: 17),
         const SizedBox(width: 6),
         Text(
-          'HOSTS ($allCount)',
+          isFiltered ? 'HOSTS ($filteredCount/$allCount)' : 'HOSTS ($allCount)',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
@@ -601,6 +843,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
           count: allCount,
           mode: 'all',
           colors: colors,
+          discovery: discovery,
         ),
         const SizedBox(width: 5),
         _buildFilterChip(
@@ -610,6 +853,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
           colors: colors,
           accentColor: colors.accentCyan,
           highlightBadge: unaddedCount > 0,
+          discovery: discovery,
         ),
         const SizedBox(width: 5),
         _buildFilterChip(
@@ -618,6 +862,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
           mode: 'added',
           colors: colors,
           accentColor: colors.accentEmerald,
+          discovery: discovery,
         ),
         const SizedBox(width: 5),
         _buildFilterChip(
@@ -626,59 +871,54 @@ class _DiscoveryViewState extends State<DiscoveryView> {
           mode: 'fast',
           colors: colors,
           accentColor: colors.accentAmber,
+          discovery: discovery,
         ),
         const SizedBox(width: 10),
 
-        // Search Input Box (Compact)
+        // Search Input Box (Compact with history suggestions)
         SizedBox(
           width: 185,
-          height: 30,
-          child: TextField(
+          child: GlassSearchHistoryField(
             controller: _searchController,
             focusNode: _searchFocus,
-            onChanged: (_) => setState(() {}),
-            style: TextStyle(fontSize: 11.5, color: colors.textPrimary),
-            decoration: InputDecoration(
-              hintText: language.t('scanner_search_hint'),
-              hintStyle: TextStyle(fontSize: 10.5, color: colors.textMuted),
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                size: 15,
-                color: _searchController.text.isNotEmpty
-                    ? colors.accentCyan
-                    : colors.textMuted,
-              ),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 13),
-                      color: colors.textMuted,
-                      padding: EdgeInsets.zero,
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {});
-                      },
-                    )
-                  : null,
-              isDense: true,
-              filled: true,
-              fillColor: colors.cardBg,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 6,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: colors.cardBorder),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: colors.cardBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: colors.accentCyan, width: 1.1),
-              ),
-            ),
+            category: 'scanner',
+            hintText: language.t('scanner_search_hint'),
+            height: 30,
+            fontSize: 11.5,
+            hintFontSize: 10.5,
+            minOverlayWidth: 260,
+            borderRadius: 6,
+            suffixBadge: discovery.searchQuery.trim().isNotEmpty
+                ? Container(
+                    margin: const EdgeInsets.only(right: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 1.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.accentCyan.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: colors.accentCyan.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      '$filteredCount',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                        color: colors.accentCyan,
+                      ),
+                    ),
+                  )
+                : null,
+            onChanged: (val) => discovery.setSearchQuery(val),
+            onSubmitted: (val) => discovery.setSearchQuery(val),
+            onClear: () {
+              _searchController.clear();
+              discovery.setSearchQuery('');
+            },
           ),
         ),
 
@@ -701,18 +941,21 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                 icon: Icons.table_rows_rounded,
                 tooltip: language.t('scanner_view_table'),
                 colors: colors,
+                discovery: discovery,
               ),
               _buildViewModeIcon(
                 mode: 'grid',
                 icon: Icons.grid_view_rounded,
                 tooltip: language.t('scanner_view_grid'),
                 colors: colors,
+                discovery: discovery,
               ),
               _buildViewModeIcon(
                 mode: 'list',
                 icon: Icons.view_agenda_rounded,
                 tooltip: language.t('scanner_view_list'),
                 colors: colors,
+                discovery: discovery,
               ),
             ],
           ),
@@ -783,10 +1026,10 @@ class _DiscoveryViewState extends State<DiscoveryView> {
         ],
 
         // Action: Add All Unadded
-        if (unaddedCount > 0 && onAddAllUnadded != null)
+        if (unaddedFilteredCount > 0 && onAddAllUnadded != null)
           GlassButton(
             label: language.t('scanner_btn_add_unadded', {
-              'count': unaddedCount.toString(),
+              'count': unaddedFilteredCount.toString(),
             }),
             icon: Icons.playlist_add_rounded,
             colors: colors,
@@ -802,12 +1045,13 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required IconData icon,
     required String tooltip,
     required dynamic colors,
+    required DiscoveryService discovery,
   }) {
-    final isSelected = _viewMode == mode;
+    final isSelected = discovery.viewMode == mode;
     return Tooltip(
       message: tooltip,
       child: InkWell(
-        onTap: () => setState(() => _viewMode = mode),
+        onTap: () => discovery.setViewMode(mode),
         borderRadius: BorderRadius.circular(4),
         child: Container(
           width: 26,
@@ -831,17 +1075,16 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required int count,
     required String mode,
     required dynamic colors,
+    required DiscoveryService discovery,
     Color? accentColor,
     bool highlightBadge = false,
   }) {
-    final isSelected = _filterMode == mode;
+    final isSelected = discovery.filterMode == mode;
     final activeColor = accentColor ?? colors.accentCyan;
 
     return InkWell(
       onTap: () {
-        setState(() {
-          _filterMode = mode;
-        });
+        discovery.setFilterMode(mode);
       },
       borderRadius: BorderRadius.circular(6),
       child: AnimatedContainer(
@@ -904,10 +1147,11 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required dynamic colors,
     required LanguageProvider language,
     required DeviceService deviceService,
+    required DiscoveryService discovery,
     required List<ManagedDevice> unaddedFiltered,
     required bool isAllFilteredSelected,
   }) {
-    switch (_viewMode) {
+    switch (discovery.viewMode) {
       case 'grid':
         return _buildGridView(
           items: items,
@@ -915,6 +1159,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
           colors: colors,
           language: language,
           deviceService: deviceService,
+          discovery: discovery,
         );
       case 'list':
         return _buildListView(
@@ -923,6 +1168,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
           colors: colors,
           language: language,
           deviceService: deviceService,
+          discovery: discovery,
         );
       case 'table':
       default:
@@ -932,6 +1178,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
           colors: colors,
           language: language,
           deviceService: deviceService,
+          discovery: discovery,
           unaddedFiltered: unaddedFiltered,
           isAllFilteredSelected: isAllFilteredSelected,
         );
@@ -945,6 +1192,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required dynamic colors,
     required LanguageProvider language,
     required DeviceService deviceService,
+    required DiscoveryService discovery,
     required List<ManagedDevice> unaddedFiltered,
     required bool isAllFilteredSelected,
   }) {
@@ -966,17 +1214,15 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                     ? null
                     : InkWell(
                         onTap: () {
-                          setState(() {
-                            if (isAllFilteredSelected) {
-                              for (final d in unaddedFiltered) {
-                                _selectedIps.remove(d.ip);
-                              }
-                            } else {
-                              for (final d in unaddedFiltered) {
-                                _selectedIps.add(d.ip);
-                              }
-                            }
-                          });
+                          if (isAllFilteredSelected) {
+                            discovery.removeSelectedIps(
+                              unaddedFiltered.map((d) => d.ip),
+                            );
+                          } else {
+                            discovery.selectAllIps(
+                              unaddedFiltered.map((d) => d.ip),
+                            );
+                          }
                         },
                         child: Icon(
                           isAllFilteredSelected
@@ -989,49 +1235,33 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                         ),
                       ),
               ),
-              Expanded(
+              _buildSortHeader(
+                title: '${language.t('scanner_col_device')} (${items.length})',
+                columnKey: 'device',
                 flex: 4,
-                child: Text(
-                  language.t('scanner_col_device'),
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textMuted,
-                  ),
-                ),
+                colors: colors,
+                discovery: discovery,
               ),
-              Expanded(
+              _buildSortHeader(
+                title: language.t('scanner_col_ip'),
+                columnKey: 'ip',
                 flex: 3,
-                child: Text(
-                  language.t('scanner_col_ip'),
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textMuted,
-                  ),
-                ),
+                colors: colors,
+                discovery: discovery,
               ),
-              Expanded(
+              _buildSortHeader(
+                title: language.t('scanner_col_mac'),
+                columnKey: 'mac',
                 flex: 3,
-                child: Text(
-                  language.t('scanner_col_mac'),
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textMuted,
-                  ),
-                ),
+                colors: colors,
+                discovery: discovery,
               ),
-              SizedBox(
+              _buildSortHeader(
+                title: language.t('scanner_col_ping'),
+                columnKey: 'ping',
                 width: 70,
-                child: Text(
-                  language.t('scanner_col_ping'),
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textMuted,
-                  ),
-                ),
+                colors: colors,
+                discovery: discovery,
               ),
               Container(
                 width: 80,
@@ -1061,20 +1291,13 @@ class _DiscoveryViewState extends State<DiscoveryView> {
             itemBuilder: (ctx, index) {
               final dev = items[index];
               final isAlreadyAdded = savedIps.contains(dev.ip);
-              final isSelected = _selectedIps.contains(dev.ip);
+              final isSelected = discovery.selectedIps.contains(dev.ip);
+              final isResolving = discovery.isResolvingHost(dev.ip);
 
               return InkWell(
                 onTap: isAlreadyAdded
                     ? null
-                    : () {
-                        setState(() {
-                          if (isSelected) {
-                            _selectedIps.remove(dev.ip);
-                          } else {
-                            _selectedIps.add(dev.ip);
-                          }
-                        });
-                      },
+                    : () => discovery.toggleSelectIp(dev.ip),
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
                   height: 32,
@@ -1107,15 +1330,9 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(3),
                                 ),
-                                onChanged: (val) {
-                                  setState(() {
-                                    if (val == true) {
-                                      _selectedIps.add(dev.ip);
-                                    } else {
-                                      _selectedIps.remove(dev.ip);
-                                    }
-                                  });
-                                },
+                                onChanged: isAlreadyAdded
+                                    ? null
+                                    : (_) => discovery.toggleSelectIp(dev.ip),
                               ),
                       ),
 
@@ -1125,7 +1342,9 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                         child: Row(
                           children: [
                             Icon(
-                              Icons.computer_rounded,
+                              MacOuiResolver.isNetworkDevice(dev.mac)
+                                  ? Icons.router_rounded
+                                  : Icons.computer_rounded,
                               size: 14,
                               color: isAlreadyAdded
                                   ? colors.accentEmerald
@@ -1133,31 +1352,106 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                             ),
                             const SizedBox(width: 6),
                             Expanded(
-                              child: Text.rich(
-                                TextSpan(
-                                  text: dev.name,
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: colors.textPrimary,
-                                  ),
-                                  children: [
-                                    if (dev.hostname.isNotEmpty &&
-                                        dev.hostname != dev.name &&
-                                        dev.hostname != dev.ip)
-                                      TextSpan(
-                                        text: ' (${dev.hostname})',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.normal,
-                                          color: colors.textMuted,
+                              child: isResolving
+                                  ? Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            dev.name,
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: colors.textPrimary,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 1.5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: colors.accentAmber
+                                                .withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                            border: Border.all(
+                                              color: colors.accentAmber
+                                                  .withValues(alpha: 0.35),
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              SizedBox(
+                                                width: 8,
+                                                height: 8,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 1.3,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(colors.accentAmber),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                language.t(
+                                                  'scanner_resolving_host',
+                                                ),
+                                                style: TextStyle(
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: colors.accentAmber,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Text.rich(
+                                      TextSpan(
+                                        text: dev.name,
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: colors.textPrimary,
+                                        ),
+                                        children: [
+                                          if (dev.hostname.isNotEmpty &&
+                                              dev.hostname != dev.name &&
+                                              dev.hostname != dev.ip)
+                                            TextSpan(
+                                              text: ' (${dev.hostname})',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.normal,
+                                                color: colors.textMuted,
+                                              ),
+                                            )
+                                          else if (dev.hostname.isEmpty ||
+                                              dev.hostname == dev.ip)
+                                            TextSpan(
+                                              text:
+                                                  ' (${language.t('scanner_no_hostname')})',
+                                              style: TextStyle(
+                                                fontSize: 9.5,
+                                                fontStyle: FontStyle.italic,
+                                                color: colors.textMuted
+                                                    .withValues(alpha: 0.7),
+                                              ),
+                                            ),
+                                        ],
                                       ),
-                                  ],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                             ),
                           ],
                         ),
@@ -1177,17 +1471,61 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                         ),
                       ),
 
-                      // MAC Address
+                      // MAC Address & Vendor
                       Expanded(
                         flex: 3,
-                        child: Text(
-                          dev.mac ?? '--',
-                          style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 10.5,
-                            color: colors.textSecondary,
-                          ),
-                        ),
+                        child: () {
+                          final vendor =
+                              MacOuiResolver.lookup(dev.mac) ??
+                              (MacOuiResolver.isLocallyAdministered(dev.mac)
+                                  ? 'Private MAC'
+                                  : null);
+                          return Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  dev.mac ?? '--',
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 10.5,
+                                    color: colors.textSecondary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (vendor != null) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: colors.accentCyan.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(3),
+                                    border: Border.all(
+                                      color: colors.accentCyan.withValues(
+                                        alpha: 0.25,
+                                      ),
+                                      width: 0.7,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    vendor,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.accentCyan,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        }(),
                       ),
 
                       // Ping
@@ -1304,6 +1642,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required dynamic colors,
     required LanguageProvider language,
     required DeviceService deviceService,
+    required DiscoveryService discovery,
   }) {
     return GridView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1317,20 +1656,11 @@ class _DiscoveryViewState extends State<DiscoveryView> {
       itemBuilder: (ctx, index) {
         final dev = items[index];
         final isAlreadyAdded = savedIps.contains(dev.ip);
-        final isSelected = _selectedIps.contains(dev.ip);
+        final isSelected = discovery.selectedIps.contains(dev.ip);
+        final isResolving = discovery.isResolvingHost(dev.ip);
 
         return InkWell(
-          onTap: isAlreadyAdded
-              ? null
-              : () {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedIps.remove(dev.ip);
-                    } else {
-                      _selectedIps.add(dev.ip);
-                    }
-                  });
-                },
+          onTap: isAlreadyAdded ? null : () => discovery.toggleSelectIp(dev.ip),
           borderRadius: BorderRadius.circular(6),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -1361,20 +1691,16 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(3),
                     ),
-                    onChanged: (val) {
-                      setState(() {
-                        if (val == true) {
-                          _selectedIps.add(dev.ip);
-                        } else {
-                          _selectedIps.remove(dev.ip);
-                        }
-                      });
-                    },
+                    onChanged: isAlreadyAdded
+                        ? null
+                        : (_) => discovery.toggleSelectIp(dev.ip),
                   ),
                 const SizedBox(width: 4),
 
                 Icon(
-                  Icons.computer_rounded,
+                  MacOuiResolver.isNetworkDevice(dev.mac)
+                      ? Icons.router_rounded
+                      : Icons.computer_rounded,
                   size: 16,
                   color: isAlreadyAdded
                       ? colors.accentEmerald
@@ -1388,24 +1714,101 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        dev.name,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: colors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              dev.name,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: colors.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isResolving) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.accentAmber.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: colors.accentAmber.withValues(
+                                    alpha: 0.35,
+                                  ),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 7,
+                                    height: 7,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.1,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        colors.accentAmber,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    language.t('scanner_resolving_host'),
+                                    style: TextStyle(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: colors.accentAmber,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      Text(
-                        dev.ip,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontFamily: 'monospace',
-                          color: colors.accentCyan,
-                        ),
-                      ),
+                      () {
+                        final vendor =
+                            MacOuiResolver.lookup(dev.mac) ??
+                            (MacOuiResolver.isLocallyAdministered(dev.mac)
+                                ? 'Private MAC'
+                                : null);
+                        return Row(
+                          children: [
+                            Text(
+                              dev.ip,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontFamily: 'monospace',
+                                color: colors.accentCyan,
+                              ),
+                            ),
+                            if (vendor != null) ...[
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  '• $vendor',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    color: colors.textMuted,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      }(),
                     ],
                   ),
                 ),
@@ -1501,6 +1904,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required dynamic colors,
     required LanguageProvider language,
     required DeviceService deviceService,
+    required DiscoveryService discovery,
   }) {
     return ListView.separated(
       itemCount: items.length,
@@ -1508,20 +1912,11 @@ class _DiscoveryViewState extends State<DiscoveryView> {
       itemBuilder: (ctx, index) {
         final dev = items[index];
         final isAlreadyAdded = savedIps.contains(dev.ip);
-        final isSelected = _selectedIps.contains(dev.ip);
+        final isSelected = discovery.selectedIps.contains(dev.ip);
+        final isResolving = discovery.isResolvingHost(dev.ip);
 
         return InkWell(
-          onTap: isAlreadyAdded
-              ? null
-              : () {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedIps.remove(dev.ip);
-                    } else {
-                      _selectedIps.add(dev.ip);
-                    }
-                  });
-                },
+          onTap: isAlreadyAdded ? null : () => discovery.toggleSelectIp(dev.ip),
           borderRadius: BorderRadius.circular(6),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
@@ -1554,21 +1949,17 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      onChanged: (val) {
-                        setState(() {
-                          if (val == true) {
-                            _selectedIps.add(dev.ip);
-                          } else {
-                            _selectedIps.remove(dev.ip);
-                          }
-                        });
-                      },
+                      onChanged: isAlreadyAdded
+                          ? null
+                          : (_) => discovery.toggleSelectIp(dev.ip),
                     ),
                   ),
 
                 // Computer Icon
                 Icon(
-                  Icons.computer_rounded,
+                  MacOuiResolver.isNetworkDevice(dev.mac)
+                      ? Icons.router_rounded
+                      : Icons.computer_rounded,
                   color: isAlreadyAdded
                       ? colors.accentEmerald
                       : colors.accentCyan,
@@ -1590,13 +1981,44 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                           color: colors.textPrimary,
                         ),
                       ),
-                      Text(
-                        dev.hostname,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          color: colors.textMuted,
+                      if (isResolving)
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 8,
+                              height: 8,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  colors.accentAmber,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              language.t('scanner_resolving_host'),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontStyle: FontStyle.italic,
+                                color: colors.accentAmber,
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          (dev.hostname.isNotEmpty && dev.hostname != dev.ip)
+                              ? dev.hostname
+                              : language.t('scanner_no_hostname'),
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: colors.textMuted,
+                            fontStyle:
+                                (dev.hostname.isEmpty || dev.hostname == dev.ip)
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -1615,17 +2037,59 @@ class _DiscoveryViewState extends State<DiscoveryView> {
                   ),
                 ),
 
-                // MAC
+                // MAC & Vendor
                 Expanded(
                   flex: 2,
-                  child: Text(
-                    dev.mac ?? '--',
-                    style: TextStyle(
-                      fontFamily: 'monospace',
-                      color: colors.textSecondary,
-                      fontSize: 10.5,
-                    ),
-                  ),
+                  child: () {
+                    final vendor =
+                        MacOuiResolver.lookup(dev.mac) ??
+                        (MacOuiResolver.isLocallyAdministered(dev.mac)
+                            ? 'Private MAC'
+                            : null);
+                    return Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            dev.mac ?? '--',
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              color: colors.textSecondary,
+                              fontSize: 10.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (vendor != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4.5,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.accentCyan.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: colors.accentCyan.withValues(
+                                  alpha: 0.25,
+                                ),
+                                width: 0.7,
+                              ),
+                            ),
+                            child: Text(
+                              vendor,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: colors.accentCyan,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  }(),
                 ),
 
                 // Latency Badge
@@ -1723,7 +2187,11 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     );
   }
 
-  Widget _buildEmptyFilterMatch(dynamic colors, LanguageProvider language) {
+  Widget _buildEmptyFilterMatch(
+    dynamic colors,
+    LanguageProvider language,
+    DiscoveryService discovery,
+  ) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1744,10 +2212,8 @@ class _DiscoveryViewState extends State<DiscoveryView> {
             icon: Icons.refresh_rounded,
             colors: colors,
             onTap: () {
-              setState(() {
-                _searchController.clear();
-                _filterMode = 'all';
-              });
+              _searchController.clear();
+              discovery.clearFilters();
             },
           ),
         ],
@@ -1759,20 +2225,24 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required dynamic colors,
     required LanguageProvider language,
     required DeviceService deviceService,
+    required DiscoveryService discovery,
     required List<ManagedDevice> allDiscovered,
     required Set<String> savedIps,
   }) async {
     final toAdd = allDiscovered
-        .where((d) => _selectedIps.contains(d.ip) && !savedIps.contains(d.ip))
+        .where(
+          (d) =>
+              discovery.selectedIps.contains(d.ip) && !savedIps.contains(d.ip),
+        )
         .toList();
 
     if (toAdd.isEmpty) {
-      setState(() => _selectedIps.clear());
+      discovery.deselectAllIps();
       return;
     }
 
     await deviceService.addDevices(toAdd);
-    setState(() => _selectedIps.clear());
+    discovery.deselectAllIps();
 
     if (mounted) {
       showAppToast(
@@ -1791,6 +2261,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     required dynamic colors,
     required LanguageProvider language,
     required DeviceService deviceService,
+    required DiscoveryService discovery,
     required List<ManagedDevice> items,
     required Set<String> savedIps,
   }) async {
@@ -1798,9 +2269,7 @@ class _DiscoveryViewState extends State<DiscoveryView> {
     if (toAdd.isEmpty) return;
 
     await deviceService.addDevices(toAdd);
-    setState(() {
-      _selectedIps.removeWhere((ip) => toAdd.any((d) => d.ip == ip));
-    });
+    discovery.removeSelectedIps(toAdd.map((d) => d.ip));
 
     if (mounted) {
       showAppToast(

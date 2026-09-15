@@ -14,7 +14,9 @@ void main() {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider(
+          create: (_) => LanguageProvider(initialLanguage: AppLanguage.vi),
+        ),
       ],
       child: MaterialApp(
         home: Scaffold(

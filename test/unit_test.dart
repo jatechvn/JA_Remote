@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:ja_remote/theme/styles_win10.dart';
 import 'package:ja_remote/widgets/glass_widgets.dart';
 import 'package:ja_remote/services/config_backup_service.dart';
+import 'package:ja_remote/services/discovery_service.dart';
+import 'package:ja_remote/services/device_service.dart';
 import 'package:ja_remote/theme/language_provider.dart';
 import 'package:ja_remote/core/utils/everything_search_matcher.dart';
 
@@ -93,6 +95,85 @@ void main() {
         equals('192.168.100.0/24'),
       );
     });
+
+    test('maskToPrefixLength calculates prefix length correctly', () {
+      expect(NetworkUtils.maskToPrefixLength('255.255.255.0'), equals(24));
+      expect(NetworkUtils.maskToPrefixLength('255.255.248.0'), equals(21));
+      expect(NetworkUtils.maskToPrefixLength('255.255.252.0'), equals(22));
+      expect(NetworkUtils.maskToPrefixLength('255.255.0.0'), equals(16));
+      expect(NetworkUtils.maskToPrefixLength('255.0.0.0'), equals(8));
+      expect(NetworkUtils.maskToPrefixLength('255.255.255.255'), equals(32));
+    });
+
+    test('calculateCidrSubnet computes accurate network CIDR', () {
+      // User actual environment: 172.21.175.40 with mask 255.255.248.0 (/21)
+      expect(
+        NetworkUtils.calculateCidrSubnet('172.21.175.40', '255.255.248.0'),
+        equals('172.21.168.0/21'),
+      );
+      // Fallback without mask
+      expect(
+        NetworkUtils.calculateCidrSubnet('172.21.175.40'),
+        equals('172.21.175.0/24'),
+      );
+    });
+
+    test('getSubnetSlices divides supernet into /24 constituent subnets', () {
+      final slices = NetworkUtils.getSubnetSlices('172.21.168.0/21');
+      expect(slices.length, equals(8));
+      expect(slices.first, equals('172.21.168.0/24'));
+      expect(slices.last, equals('172.21.175.0/24'));
+      expect(slices, contains('172.21.169.0/24'));
+      expect(slices, contains('172.21.171.0/24'));
+      expect(slices, contains('172.21.174.0/24'));
+    });
+
+    test('expandSubnet expands full /21 supernet (2046 hosts)', () {
+      final hosts = NetworkUtils.expandSubnet('172.21.168.0/21');
+      expect(hosts.length, equals(2046));
+      expect(hosts.first, equals('172.21.168.1'));
+      expect(hosts.last, equals('172.21.175.254'));
+      expect(hosts, contains('172.21.171.3'));
+      expect(hosts, contains('172.21.174.41'));
+      expect(hosts, contains('172.21.175.40'));
+    });
+
+    test('compareIps numerically sorts IPv4 addresses correctly', () {
+      expect(
+        NetworkUtils.compareIps('172.21.168.2', '172.21.168.10'),
+        lessThan(0),
+      );
+      expect(
+        NetworkUtils.compareIps('172.21.168.10', '172.21.168.2'),
+        greaterThan(0),
+      );
+      expect(
+        NetworkUtils.compareIps('172.21.168.2', '172.21.168.2'),
+        equals(0),
+      );
+      expect(
+        NetworkUtils.compareIps('172.21.168.200', '172.21.171.3'),
+        lessThan(0),
+      );
+      expect(NetworkUtils.compareIps('10.0.0.1', '192.168.1.1'), lessThan(0));
+    });
+
+    test(
+      'getAvailableAdapters detects adapters and calculates supernet if present',
+      () async {
+        final adapters = await NetworkUtils.getAvailableAdapters();
+        expect(adapters, isA<List<NetworkInterfaceDetails>>());
+        final eth2 = adapters.where((a) => a.name == 'Ethernet 2').firstOrNull;
+        if (eth2 != null) {
+          expect(eth2.prefixLength, equals(21));
+          expect(eth2.subnet, equals('172.21.168.0/21'));
+          expect(eth2.subSlices.length, equals(8));
+          expect(eth2.subSlices, contains('172.21.171.0/24'));
+          expect(eth2.subSlices, contains('172.21.174.0/24'));
+          expect(eth2.subSlices, contains('172.21.175.0/24'));
+        }
+      },
+    );
   });
 
   group('WakeOnLan Magic Packet Tests', () {
@@ -366,7 +447,7 @@ void main() {
     test(
       'theme_dark and theme_light resolve correctly across all languages',
       () {
-        final lp = LanguageProvider();
+        final lp = LanguageProvider(initialLanguage: AppLanguage.vi);
 
         // Default Vietnamese
         expect(lp.t('theme_dark'), equals('Tối'));
@@ -417,6 +498,8 @@ void main() {
           'scanner_col_mac',
           'scanner_col_ping',
           'scanner_col_action',
+          'scanner_resolving_host',
+          'scanner_no_hostname',
         ];
 
         for (final lang in [AppLanguage.vi, AppLanguage.en, AppLanguage.cn]) {
@@ -769,5 +852,86 @@ void main() {
       expect(lp.t('dev_btn_export'), equals('导出'));
       expect(lp.t('dev_btn_import'), equals('导入'));
     });
+  });
+
+  group('DiscoveryService & DeviceService Tab State Persistence Tests', () {
+    test(
+      'DiscoveryService retains filterMode, searchQuery, sort and viewMode',
+      () {
+        final service = DiscoveryService(initialize: false);
+
+        // Default initial states
+        expect(service.searchQuery, isEmpty);
+        expect(service.filterMode, equals('all'));
+        expect(service.sortColumn, equals('ip'));
+        expect(service.sortAscending, isTrue);
+        expect(service.viewMode, equals('table'));
+        expect(service.showAdapters, isFalse);
+        expect(service.selectedIps, isEmpty);
+
+        // Mutate UI states
+        service.setSearchQuery('TP-Link');
+        service.setFilterMode('fast');
+        service.setSort('ping', ascending: false);
+        service.setViewMode('grid');
+        service.toggleShowAdapters();
+        service.toggleSelectIp('172.21.174.41');
+        service.selectAllIps(['172.21.174.42', '172.21.174.43']);
+
+        expect(service.searchQuery, equals('TP-Link'));
+        expect(service.filterMode, equals('fast'));
+        expect(service.sortColumn, equals('ping'));
+        expect(service.sortAscending, isFalse);
+        expect(service.viewMode, equals('grid'));
+        expect(service.showAdapters, isTrue);
+        expect(
+          service.selectedIps,
+          containsAll(['172.21.174.41', '172.21.174.42', '172.21.174.43']),
+        );
+
+        // Toggle sort flips ascending
+        service.setSort('ping');
+        expect(service.sortAscending, isTrue);
+
+        // Remove specific selected IPs
+        service.removeSelectedIps(['172.21.174.42']);
+        expect(service.selectedIps.contains('172.21.174.42'), isFalse);
+        expect(service.selectedIps.length, equals(2));
+
+        // Clear filters only resets search and filter mode
+        service.clearFilters();
+        expect(service.searchQuery, isEmpty);
+        expect(service.filterMode, equals('all'));
+        expect(service.sortColumn, equals('ping')); // sort preserved
+        expect(service.viewMode, equals('grid')); // view mode preserved
+        expect(service.selectedIps.length, equals(2)); // selection preserved
+
+        // Deselect all
+        service.deselectAllIps();
+        expect(service.selectedIps, isEmpty);
+
+        service.dispose();
+      },
+    );
+
+    test(
+      'DeviceService retains sortColumn and sortAscending across changes',
+      () {
+        final service = DeviceService();
+
+        expect(service.sortColumn, equals('ip'));
+        expect(service.sortAscending, isTrue);
+
+        service.setSort('name', ascending: false);
+        expect(service.sortColumn, equals('name'));
+        expect(service.sortAscending, isFalse);
+
+        service.setSort('name');
+        expect(service.sortColumn, equals('name'));
+        expect(service.sortAscending, isTrue);
+
+        service.dispose();
+      },
+    );
   });
 }

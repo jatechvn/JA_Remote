@@ -1,0 +1,128 @@
+{
+  "time": "2026-09-10T07:47:10.282679",
+  "subnet": "172.21.168.0/21",
+  "timeoutMs": 800,
+  "workers": 8,
+  "results": [
+    {
+      "ip": "172.21.169.184",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.169.239",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.170.152",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.171.29",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.174.100",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.174.46",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.174.50",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.174.54",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.174.66",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.174.70",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.174.77",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.175.20",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.175.24",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.175.38",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    },
+    {
+      "ip": "172.21.175.49",
+      "pingReplies": [
+        false,
+        false
+      ],
+      "arpMac": null
+    }
+  ]
+}

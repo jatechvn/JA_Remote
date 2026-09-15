@@ -9,6 +9,7 @@ import '../../data/models/managed_device.dart';
 import '../../services/device_service.dart';
 import '../../services/power_service.dart';
 import '../../services/tool_launcher_service.dart';
+import 'port_scanner_dialog.dart';
 
 /// Glass dialog displaying full device details, fast action buttons, and edit options.
 void showDeviceDetailDialog(BuildContext context, ManagedDevice device) {
@@ -123,6 +124,16 @@ void showDeviceDetailDialog(BuildContext context, ManagedDevice device) {
                     colors: colors,
                     onTap: () {
                       toolService.launchComputerManagement(device);
+                    },
+                  ),
+                  // Port Scanner
+                  _ActionButton(
+                    label: language.t('port_scanner_btn_open_dialog'),
+                    icon: Icons.radar_rounded,
+                    color: colors.accentCyan,
+                    colors: colors,
+                    onTap: () {
+                      showPortScannerDialog(context, initialHost: device.ip);
                     },
                   ),
                   // Wake-on-LAN

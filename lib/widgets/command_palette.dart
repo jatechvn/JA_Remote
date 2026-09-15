@@ -1,3 +1,4 @@
+import 'route_shortcuts.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -341,10 +342,6 @@ Future<void> showCommandPalette(
   );
 }
 
-class _OpenPaletteIntent extends Intent {
-  const _OpenPaletteIntent();
-}
-
 /// Wraps [child] with a global Ctrl+K (and Cmd+K) shortcut that opens the
 /// command palette. Wrap this around the app's root content (e.g. inside
 /// `MaterialApp.builder` or directly around `DashboardShell`).
@@ -363,24 +360,14 @@ class CommandPaletteShortcut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
-            const _OpenPaletteIntent(),
-        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
-            const _OpenPaletteIntent(),
+    return RouteShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+            showCommandPalette(context, items: items()),
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): () =>
+            showCommandPalette(context, items: items()),
       },
-      child: Actions(
-        actions: {
-          _OpenPaletteIntent: CallbackAction<_OpenPaletteIntent>(
-            onInvoke: (_) {
-              showCommandPalette(context, items: items());
-              return null;
-            },
-          ),
-        },
-        child: Focus(autofocus: true, child: child),
-      ),
+      child: Focus(autofocus: true, child: child),
     );
   }
 }

@@ -116,23 +116,44 @@ class PingEngine {
     List<String> ips, {
     int maxConcurrent = 16,
     int timeoutMs = 400,
-  }) async* {
-    final queue = List<String>.from(ips);
-    final controller = StreamController<PingResult>();
+    Future<PingResult> Function(String, int)? probe,
+  }) {
+    if (maxConcurrent < 1 || timeoutMs < 1) {
+      throw ArgumentError('Concurrency and timeout must be positive');
+    }
+    final targets = List<String>.of(ips);
+    final runProbe = probe ?? (ip, timeout) => ping(ip, timeoutMs: timeout);
+    late StreamController<PingResult> controller;
+    var nextIndex = 0;
+    var cancelled = false;
     int activeCount = 0;
 
     void next() {
-      if (queue.isEmpty && activeCount == 0) {
+      if (cancelled || controller.isPaused) return;
+      if (nextIndex == targets.length && activeCount == 0) {
         if (!controller.isClosed) controller.close();
         return;
       }
-      while (activeCount < maxConcurrent && queue.isNotEmpty) {
-        final ip = queue.removeAt(0);
+      while (activeCount < maxConcurrent && nextIndex < targets.length) {
+        final ip = targets[nextIndex++];
         activeCount++;
-        ping(ip, timeoutMs: timeoutMs)
-            .then((res) {
-              if (!controller.isClosed) controller.add(res);
-            })
+        Future.sync(() => runProbe(ip, timeoutMs))
+            .then(
+              (res) {
+                if (!cancelled) controller.add(res);
+              },
+              onError: (Object error) {
+                if (!cancelled) {
+                  controller.add(
+                    PingResult(
+                      ip: ip,
+                      isOnline: false,
+                      error: error.toString(),
+                    ),
+                  );
+                }
+              },
+            )
             .whenComplete(() {
               activeCount--;
               next();
@@ -140,7 +161,13 @@ class PingEngine {
       }
     }
 
-    next();
-    yield* controller.stream;
+    controller = StreamController<PingResult>(
+      onListen: next,
+      onResume: next,
+      onCancel: () {
+        cancelled = true;
+      },
+    );
+    return controller.stream;
   }
 }

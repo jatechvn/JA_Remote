@@ -1,3 +1,4 @@
+import '../widgets/route_shortcuts.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +14,9 @@ import '../widgets/app_toast.dart';
 import '../features/devices/devices_view.dart';
 import '../features/discovery/discovery_view.dart';
 import '../features/command_runner/command_runner_view.dart';
+import '../features/file_deploy/file_deploy_view.dart';
 import '../features/logs/logs_view.dart';
+import '../core/network/mac_oui_resolver.dart';
 
 part 'dashboard_shell_settings.dart';
 
@@ -37,7 +40,16 @@ class DashboardShell extends StatefulWidget {
 
 class _DashboardShellState extends State<DashboardShell> {
   int _currentIndex = 0;
+  final Set<int> _activatedTabs = {0};
   final bool _isServiceRunning = true;
+
+  void _selectTab(int index) {
+    if (index < 0 || index >= _tabIcons.length) return;
+    setState(() {
+      _currentIndex = index;
+      _activatedTabs.add(index);
+    });
+  }
 
   // Below this width the top SlidingPillTabBar hides and MobileDockNav
   // takes over, matching tablet/mobile responsive breakpoints.
@@ -47,26 +59,29 @@ class _DashboardShellState extends State<DashboardShell> {
     Icons.devices_rounded,
     Icons.radar_rounded,
     Icons.terminal_rounded,
+    Icons.drive_folder_upload_rounded,
     Icons.history_edu_rounded,
   ];
 
   @override
   Widget build(BuildContext context) {
+    _activatedTabs.add(_currentIndex);
     final theme = context.watch<ThemeProvider>();
     final language = context.watch<LanguageProvider>();
     final colors = theme.colors;
     final isMobile = MediaQuery.of(context).size.width < _mobileBreakpoint;
 
-    return CallbackShortcuts(
+    return RouteShortcuts(
       bindings: {
         for (final entry in [
           LogicalKeyboardKey.digit1,
           LogicalKeyboardKey.digit2,
           LogicalKeyboardKey.digit3,
           LogicalKeyboardKey.digit4,
+          LogicalKeyboardKey.digit5,
         ].asMap().entries)
           SingleActivator(entry.value, control: true): () =>
-              setState(() => _currentIndex = entry.key),
+              _selectTab(entry.key),
         const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
             _showGlassSettingsDialog(context, theme, language),
         const SingleActivator(LogicalKeyboardKey.f1): () => showDialog<void>(
@@ -92,13 +107,52 @@ class _DashboardShellState extends State<DashboardShell> {
           header: _buildTopHeader(context, theme, language, colors, isMobile),
           body: Stack(
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(18, 0, 18, isMobile ? 84 : 16),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  child: _buildCurrentView(),
+              Positioned.fill(
+                left: 18,
+                right: 18,
+                top: 0,
+                bottom: isMobile ? 84 : 16,
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: [
+                    DevicesView(
+                      key: const ValueKey('Devices'),
+                      onNavigateTab: _selectTab,
+                      isActive: _currentIndex == 0,
+                    ),
+                    _activatedTabs.contains(1)
+                        ? DiscoveryView(
+                            key: const ValueKey('Discovery'),
+                            isActive: _currentIndex == 1,
+                          )
+                        : const SizedBox.shrink(
+                            key: ValueKey('Discovery_Placeholder'),
+                          ),
+                    _activatedTabs.contains(2)
+                        ? CommandRunnerView(
+                            key: const ValueKey('CommandRunner'),
+                            isActive: _currentIndex == 2,
+                          )
+                        : const SizedBox.shrink(
+                            key: ValueKey('CommandRunner_Placeholder'),
+                          ),
+                    _activatedTabs.contains(3)
+                        ? FileDeployView(
+                            key: const ValueKey('FileDeploy'),
+                            isActive: _currentIndex == 3,
+                          )
+                        : const SizedBox.shrink(
+                            key: ValueKey('FileDeploy_Placeholder'),
+                          ),
+                    _activatedTabs.contains(4)
+                        ? LogsView(
+                            key: const ValueKey('Logs'),
+                            isActive: _currentIndex == 4,
+                          )
+                        : const SizedBox.shrink(
+                            key: ValueKey('Logs_Placeholder'),
+                          ),
+                  ],
                 ),
               ),
               if (isMobile)
@@ -111,8 +165,7 @@ class _DashboardShellState extends State<DashboardShell> {
                     currentIndex: _currentIndex,
                     tabs: language.tabLabels,
                     icons: _tabIcons,
-                    onTabSelected: (index) =>
-                        setState(() => _currentIndex = index),
+                    onTabSelected: _selectTab,
                   ),
                 ),
             ],
@@ -120,24 +173,6 @@ class _DashboardShellState extends State<DashboardShell> {
         ),
       ),
     );
-  }
-
-  Widget _buildCurrentView() {
-    switch (_currentIndex) {
-      case 0:
-        return DevicesView(
-          key: const ValueKey('Devices'),
-          onNavigateTab: (idx) => setState(() => _currentIndex = idx),
-        );
-      case 1:
-        return const DiscoveryView(key: ValueKey('Discovery'));
-      case 2:
-        return const CommandRunnerView(key: ValueKey('CommandRunner'));
-      case 3:
-        return const LogsView(key: ValueKey('Logs'));
-      default:
-        return const SizedBox.shrink();
-    }
   }
 
   Widget _buildTopHeader(
@@ -164,7 +199,7 @@ class _DashboardShellState extends State<DashboardShell> {
         children: [
           // Brand Logo + Title + Version Tag
           InkWell(
-            onTap: () => setState(() => _currentIndex = 0),
+            onTap: () => _selectTab(0),
             borderRadius: BorderRadius.circular(10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -265,25 +300,29 @@ class _DashboardShellState extends State<DashboardShell> {
                       currentIndex: _currentIndex,
                       tabs: language.tabLabels,
                       icons: _tabIcons,
-                      onTabSelected: (index) =>
-                          setState(() => _currentIndex = index),
+                      onTabSelected: _selectTab,
                     ),
                   ),
           ),
 
           SizedBox(width: isMobile ? 8 : 12),
 
-          // Dynamic Island Status Capsule
-          DynamicIslandCapsule(
-            colors: colors,
-            isRunning: _isServiceRunning,
-            statusText: _isServiceRunning
-                ? language.t('status_live')
+          // Dynamic Island Status Capsule (Compact to reserve space for tabs)
+          Tooltip(
+            message: _isServiceRunning
+                ? '${language.t('status_live')} • ${language.t('status_devices')}'
                 : language.t('status_standby'),
-            subText: (!isMobile && screenWidth > 960 && _isServiceRunning)
-                ? language.t('status_devices')
-                : null,
-            onTap: () => setState(() => _currentIndex = 0),
+            child: DynamicIslandCapsule(
+              colors: colors,
+              isRunning: _isServiceRunning,
+              statusText: _isServiceRunning
+                  ? language.t('status_live')
+                  : language.t('status_standby'),
+              subText: (!isMobile && screenWidth > 1560 && _isServiceRunning)
+                  ? language.t('status_devices')
+                  : null,
+              onTap: () => setState(() => _currentIndex = 0),
+            ),
           ),
 
           const SizedBox(width: 8),
@@ -296,7 +335,7 @@ class _DashboardShellState extends State<DashboardShell> {
               size: 14,
             ),
             collapsedLabel: isCompact ? null : theme.perfLabel,
-            expandedLabel: '⚡ ${theme.perfLabel}',
+            expandedLabel: theme.perfLabel,
             textColor: theme.effectiveTier.color,
             isCompact: isCompact,
             tooltip: language.t('perf_tooltip'),
@@ -307,13 +346,12 @@ class _DashboardShellState extends State<DashboardShell> {
               String msg;
               if (langCode == 'EN') {
                 msg =
-                    '⚡ Graphic Tier: ${theme.perfLabel} (Optimized for ${theme.cpuCores} CPU Cores)';
+                    'Graphic Tier: ${theme.perfLabel} (Optimized for ${theme.cpuCores} CPU Cores)';
               } else if (langCode == 'CN') {
-                msg =
-                    '⚡ 硬件档位: ${theme.perfLabel} (针对 ${theme.cpuCores} 核处理器优化)';
+                msg = '硬件档位: ${theme.perfLabel} (针对 ${theme.cpuCores} 核处理器优化)';
               } else {
                 msg =
-                    '⚡ Cấu hình máy: ${theme.perfLabel} (Tự động nhận diện CPU ${theme.cpuCores} Cores)';
+                    'Cấu hình máy: ${theme.perfLabel} (Tự động nhận diện CPU ${theme.cpuCores} Cores)';
               }
               showAppToast(
                 context,
@@ -328,13 +366,13 @@ class _DashboardShellState extends State<DashboardShell> {
 
           // 2. Quick Language Switcher (🌐 VI / EN / CN)
           TopBarExpandingButton(
-            icon: Text(
-              language.currentLanguage.flag,
-              style: const TextStyle(fontSize: 12),
+            icon: Icon(
+              Icons.language_rounded,
+              color: colors.accentCyan,
+              size: 14,
             ),
             collapsedLabel: isCompact ? null : language.currentLanguage.code,
-            expandedLabel:
-                '${language.currentLanguage.flag} ${language.currentLanguage.label}',
+            expandedLabel: language.currentLanguage.label,
             textColor: colors.accentCyan,
             isCompact: isCompact,
             tooltip: language.t('lang_tooltip'),
@@ -414,7 +452,7 @@ class _DashboardShellState extends State<DashboardShell> {
 
     int activeTab = 0;
 
-    showDialog(
+    showDialog<bool>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
@@ -423,24 +461,15 @@ class _DashboardShellState extends State<DashboardShell> {
               title: language.t('settings_dialog_title'),
               icon: Icons.tune_rounded,
               isDark: theme.isDark,
-              width: 600,
-              height: 560,
+              width: 660,
+              height: 590,
               contentPadding: EdgeInsets.zero,
               blurSigma: localDialogBlur,
               bgOpacity: localDialogOpacity,
               actions: [
                 TextButton(
                   onPressed: () {
-                    // Revert live preview
-                    theme.setLiveGlassmorphism(
-                      cardBlur: origCardBlur,
-                      cardOpacity: origCardOpacity,
-                      dialogBlur: origDialogBlur,
-                      dialogOpacity: origDialogOpacity,
-                      dropdownBlur: origDropdownBlur,
-                      dropdownOpacity: origDropdownOpacity,
-                    );
-                    Navigator.pop(ctx);
+                    Navigator.pop(ctx, false);
                   },
                   child: Text(
                     language.t('action_cancel'),
@@ -453,7 +482,10 @@ class _DashboardShellState extends State<DashboardShell> {
                   colors: colors,
                   icon: Icons.save_rounded,
                   label: language.t('action_save'),
-                  onPressed: () => Navigator.pop(ctx),
+                  onPressed: () {
+                    theme.saveSettings();
+                    Navigator.pop(ctx, true);
+                  },
                 ),
               ],
               child: Column(
@@ -510,7 +542,7 @@ class _DashboardShellState extends State<DashboardShell> {
                                 localDialogBlur = 20.0;
                                 localDialogOpacity = 0.85;
                                 localDropdownBlur = 20.0;
-                                localDropdownOpacity = 0.86;
+                                localDropdownOpacity = 0.95;
                               });
                               theme.setLiveGlassmorphism(
                                 cardBlur: 20.0,
@@ -518,22 +550,27 @@ class _DashboardShellState extends State<DashboardShell> {
                                 dialogBlur: 20.0,
                                 dialogOpacity: 0.85,
                                 dropdownBlur: 20.0,
-                                dropdownOpacity: 0.86,
+                                dropdownOpacity: 0.95,
                               );
                             },
                           )
                         : (activeTab == 1
-                              ? _SettingsUserGuideTab(
+                              ? _SettingsMacOuiTab(
                                   colors: colors,
                                   language: language,
                                 )
-                              : _SettingsAboutTab(
-                                  colors: colors,
-                                  theme: theme,
-                                  language: language,
-                                  appVersion: widget.appVersion,
-                                  isDebug: widget.isDebug,
-                                )),
+                              : (activeTab == 2
+                                    ? _SettingsUserGuideTab(
+                                        colors: colors,
+                                        language: language,
+                                      )
+                                    : _SettingsAboutTab(
+                                        colors: colors,
+                                        theme: theme,
+                                        language: language,
+                                        appVersion: widget.appVersion,
+                                        isDebug: widget.isDebug,
+                                      ))),
                   ),
                 ],
               ),
@@ -541,7 +578,17 @@ class _DashboardShellState extends State<DashboardShell> {
           },
         );
       },
-    );
+    ).then((saved) {
+      if (!mounted || saved == true) return;
+      theme.setLiveGlassmorphism(
+        cardBlur: origCardBlur,
+        cardOpacity: origCardOpacity,
+        dialogBlur: origDialogBlur,
+        dialogOpacity: origDialogOpacity,
+        dropdownBlur: origDropdownBlur,
+        dropdownOpacity: origDropdownOpacity,
+      );
+    });
   }
 
   String _getFallbackBuildTimestamp() {

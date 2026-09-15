@@ -57,6 +57,10 @@ class GlassTerminalController {
     _state?.clearStream();
   }
 
+  void focusPrompt() {
+    _state?._keepPromptFocused();
+  }
+
   int get lineCount => _state?._lines.length ?? 0;
 }
 
@@ -252,6 +256,7 @@ class GlassTerminalPanel extends StatefulWidget {
   final FutureOr<String?> Function(String command)? onCommand;
   final GlassTerminalController? controller;
   final List<String>? quickCommands;
+  final FocusNode? promptFocusNode;
 
   const GlassTerminalPanel({
     super.key,
@@ -260,6 +265,7 @@ class GlassTerminalPanel extends StatefulWidget {
     this.onCommand,
     this.controller,
     this.quickCommands,
+    this.promptFocusNode,
   });
 
   @override
@@ -275,10 +281,10 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  late final FocusNode _focusNode = FocusNode(
-    debugLabel: 'TerminalPromptFocusNode',
-    onKeyEvent: _handleKeyEvent,
-  );
+  FocusNode? _createdFocusNode;
+  FocusNode get _effectiveFocusNode =>
+      widget.promptFocusNode ??
+      (_createdFocusNode ??= FocusNode(debugLabel: 'TerminalPromptFocusNode'));
 
   bool _autoScroll = true;
 
@@ -343,7 +349,7 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
       widget.controller?._state = null;
     }
     _inputController.dispose();
-    _focusNode.dispose();
+    _createdFocusNode?.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -381,10 +387,10 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
 
   void _keepPromptFocused() {
     if (!mounted) return;
-    _focusNode.requestFocus();
+    _effectiveFocusNode.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _focusNode.requestFocus();
+        _effectiveFocusNode.requestFocus();
       }
     });
   }
@@ -928,12 +934,16 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
           ),
 
           // 4. Interactive Command Prompt Bar (Persistently focused cursor)
-          _TerminalPromptBar(
-            palette: palette,
-            language: language,
-            controller: _inputController,
-            focusNode: _focusNode,
-            onSubmitted: _executeCommand,
+          Focus(
+            canRequestFocus: false,
+            onKeyEvent: _handleKeyEvent,
+            child: _TerminalPromptBar(
+              palette: palette,
+              language: language,
+              controller: _inputController,
+              focusNode: _effectiveFocusNode,
+              onSubmitted: _executeCommand,
+            ),
           ),
         ],
       ),

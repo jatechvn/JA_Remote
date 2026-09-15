@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -23,6 +24,47 @@ class ProcessExecutionResult {
 
 /// Helper for executing system processes and Windows management tools.
 class ProcessRunner {
+  /// Drain output concurrently and stop the local process when its deadline expires.
+  static Future<ProcessResult> runWithTimeout(
+    String executable,
+    List<String> arguments, {
+    required Duration timeout,
+    Future<Process> Function()? start,
+  }) async {
+    if (timeout <= Duration.zero) {
+      throw ArgumentError('Timeout must be positive');
+    }
+    Process? process;
+    var finished = false;
+    try {
+      return await (() async {
+        final child =
+            await (start?.call() ?? Process.start(executable, arguments));
+        if (finished) {
+          child.kill();
+          throw TimeoutException('Process started after deadline', timeout);
+        }
+        process = child;
+        final values = await Future.wait<Object>([
+          child.exitCode,
+          const SystemEncoding().decodeStream(child.stdout),
+          const SystemEncoding().decodeStream(child.stderr),
+        ]);
+        return ProcessResult(child.pid, values[0] as int, values[1], values[2]);
+      })().timeout(timeout);
+    } on TimeoutException {
+      return ProcessResult(
+        process?.pid ?? -1,
+        -1,
+        '',
+        'Execution timed out after ${timeout.inSeconds} seconds.',
+      );
+    } finally {
+      finished = true;
+      process?.kill();
+    }
+  }
+
   /// Converts a UTF-8 script string to Windows UTF-16LE Base64 for PowerShell -EncodedCommand.
   /// This eliminates any shell escaping, quoting, newline, or pipe corruption issues.
   static String toEncodedCommand(String script) {
@@ -112,24 +154,52 @@ $script
 ''';
       }
 
-      final encoded = toEncodedCommand(finalScript);
-
-      final result =
-          await Process.run('powershell.exe', [
+      File? tempScriptFile;
+      ProcessResult result;
+      try {
+        final encoded = toEncodedCommand(finalScript);
+        // Windows lpCommandLine limit for CreateProcess is 32,767 characters.
+        // When encoded command exceeds 8,192 characters, write to a temp .ps1 file
+        // with UTF-8 BOM to prevent "ProcessThe filename or extension is too long" error.
+        if (encoded.length <= 8192) {
+          result = await runWithTimeout('powershell.exe', [
             '-NoProfile',
             '-ExecutionPolicy',
             'Bypass',
             '-EncodedCommand',
             encoded,
-          ]).timeout(
-            Duration(seconds: timeoutSeconds),
-            onTimeout: () => ProcessResult(
-              -1,
-              -1,
-              '',
-              'Execution timed out after $timeoutSeconds seconds.',
-            ),
-          );
+          ], timeout: Duration(seconds: timeoutSeconds));
+        } else {
+          final tempDir = Directory.systemTemp;
+          final tempPath =
+              '${tempDir.path}${Platform.pathSeparator}ja_remote_script_${DateTime.now().microsecondsSinceEpoch}.ps1';
+          final tempFile = File(tempPath);
+          // Write UTF-8 with BOM (0xEF, 0xBB, 0xBF) so Windows PowerShell 5.1/7 parses UTF-8 correctly
+          await tempFile.writeAsBytes([
+            0xEF,
+            0xBB,
+            0xBF,
+            ...utf8.encode(finalScript),
+          ], flush: true);
+          tempScriptFile = tempFile;
+
+          result = await runWithTimeout('powershell.exe', [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            tempFile.path,
+          ], timeout: Duration(seconds: timeoutSeconds));
+        }
+      } finally {
+        if (tempScriptFile != null) {
+          try {
+            if (await tempScriptFile.exists()) {
+              await tempScriptFile.delete();
+            }
+          } catch (_) {}
+        }
+      }
 
       final out = result.stdout.toString().trim();
       final rawErr = result.stderr.toString().trim();
