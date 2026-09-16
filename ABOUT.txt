@@ -3,7 +3,7 @@
 ========================================================================
 Project Name : JA Remote - TE PC Manager
 Tech Stack   : Flutter / Dart / Provider / Windows Desktop (C++ Runner)
-Version      : 1.2.0+3
+Version      : 1.2.1+4
 Managed By   : JA Auto Git
 Author       : Johnny / JA-Tech System
 Website      : https://jatechvn.github.io/

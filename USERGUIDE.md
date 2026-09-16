@@ -1,8 +1,8 @@
-# Hướng dẫn sử dụng JA Remote v1.2.0
+# Hướng dẫn sử dụng JA Remote v1.2.1
 
 ## Cài đặt portable
 
-Giải nén toàn bộ `JA_Remote_v1.2.0_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy EXE. Chạy `debug.bat` khi cần ghi log chẩn đoán. Bản phát hành dành cho Windows x64.
+Giải nén toàn bộ `JA_Remote_v1.2.1_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy EXE. Chạy `debug.bat` khi cần ghi log chẩn đoán. Bản phát hành dành cho Windows x64.
 
 ## Thiết bị và quét LAN
 
@@ -23,7 +23,7 @@ Giải nén toàn bộ `JA_Remote_v1.2.0_Windows_x64.zip`, giữ nguyên thư m�
 
 ## Triển khai tệp đa thiết bị (File Deployer - Ctrl+4)
 
-1. **Chọn nguồn:** Bấm *Chọn File* hoặc *Chọn Thư mục* để chọn tệp/gói cập nhật cần phân phối. App hỗ trợ tự động ghi nhớ các đường dẫn nguồn gần nhất.
+1. **Chọn nguồn:** Bấm *Chọn File* hoặc *Chọn Thư mục* để chọn tệp/gói cập nhật cần phân phối. Hộp thoại chọn thư mục đã được nâng cấp lên chuẩn Windows Explorer hiện đại (hỗ trợ thanh địa chỉ breadcrumb, dán đường dẫn trực tiếp, Quick Access và tự động mở đúng thư mục nguồn hiện tại). App hỗ trợ tự động ghi nhớ các đường dẫn nguồn gần nhất.
 2. **Chọn đích:** Nhập đường dẫn đích trên máy từ xa (ví dụ `C:\Temp\Deploy` hoặc `/tmp/deploy/`) hoặc chọn từ các nút Preset / lịch sử gợi ý.
 3. **Tùy chọn nâng cao:**
    - *Tạo thư mục nếu chưa có:* Tự động tạo cây thư mục đích nếu máy từ xa chưa tồn tại.

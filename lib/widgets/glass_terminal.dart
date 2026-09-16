@@ -9,6 +9,7 @@ import '../theme/language_provider.dart';
 import '../theme/theme_provider.dart';
 import 'app_toast.dart';
 import 'glass_widgets.dart';
+import '../modules/constants.dart';
 
 /// Semantic classification for terminal log output.
 enum TerminalLineType {
@@ -334,7 +335,7 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
         widget.initialWelcomeText ??
         (lang != null
             ? '${lang.t('terminal_default_banner')}\n${lang.t('terminal_default_help_hint')}'
-            : 'JA Remote Command Console [Version 1.2.0]\n'
+            : 'JA Remote Command Console [Version $appVersion]\n'
                   'Type "help" to view available diagnostic and system commands.');
 
     _lines.add(TerminalLine(initMsg, type: TerminalLineType.system));
@@ -594,7 +595,7 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
         setState(() {
           _lines.add(
             TerminalLine(
-              'JA Showcase Terminal v1.2.0 [Fedora 44 / Bento Glass Engine]',
+              'JA Showcase Terminal v$appVersion [Fedora 44 / Bento Glass Engine]',
               type: TerminalLineType.system,
             ),
           );

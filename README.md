@@ -4,7 +4,7 @@
 
 Quản trị máy trạm qua LAN cho nhà xưởng, trạm kiểm thử và văn phòng.
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue) ![Platform](https://img.shields.io/badge/platform-Windows_x64-0078D4) ![Dart](https://img.shields.io/badge/Dart-%3E%3D3.12.2-0175C2) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-1.2.1-blue) ![Platform](https://img.shields.io/badge/platform-Windows_x64-0078D4) ![Dart](https://img.shields.io/badge/Dart-%3E%3D3.12.2-0175C2) ![License](https://img.shields.io/badge/license-MIT-green)
 
 [Download](https://github.com/jatechvn/JA_Remote/releases) · [User Guide](USERGUIDE.md) · [Changelog](CHANGELOG.md) · [JA-Tech](https://jatechvn.github.io/)
 
@@ -108,6 +108,7 @@ RELEASE_NOTES.md            # Metadata và nội dung GitHub Release
 
 ## Thay đổi gần đây
 
+- **v1.2.1:** Nâng cấp hộp thoại chọn thư mục trong File Deployer lên chuẩn Windows Explorer hiện đại (thanh địa chỉ breadcrumb, dán trực tiếp đường dẫn, tìm kiếm nhanh và Quick Access/Favorites); tự động điều hướng `initialDirectory` thông minh và tối ưu hóa null-safety.
 - **v1.2.0:** Tính năng File Deployer đa thiết bị (WinRM/SMB/SFTP) với auto-kill tiến trình chiếm file & safe rename; công cụ quét cổng TCP Port Scanner; xử lý triệt để giới hạn dòng lệnh Win32 CLI (`ProcessThe filename or extension is too long`); responsive auto-collapse; ghi nhớ lịch sử tìm kiếm/đường dẫn; con trỏ thông minh.
 - **v1.1.0:** Hệ thống phím tắt toàn cục, Command Palette, sửa lỗi Provider/đổi tab/đích thực thi và đồng bộ tài liệu.
 - **v1.0.0:** Nền tảng quản lý thiết bị LAN, remote PowerShell/SSH, quét mạng và giao diện kính mờ Liquid Glass.

@@ -1,5 +1,24 @@
 # CHANGELOG — JA Remote
 
+## [v1.2.1] - 2026-09-16
+
+### 🚀 Nâng cấp & Tối ưu hóa
+- **Hộp thoại chọn thư mục chuẩn Windows Explorer hiện đại (Modern Folder Picker):**
+  - Nâng cấp `FileDialogHelper.pickDirectory` sử dụng giao diện chuẩn Windows Shell `IFileOpenDialog` (`FOS_PICKFOLDERS`) thông qua reflection, thay thế hoàn toàn hộp thoại cây thư mục cổ điển Win95 (`FolderBrowserDialog`).
+  - Hỗ trợ thanh địa chỉ breadcrumb, ô dán trực tiếp đường dẫn, thanh tìm kiếm và cây truy cập nhanh Quick Access/Favorites.
+  - Tích hợp điều hướng `initialDirectory` thông minh: tự động trỏ ngay tới thư mục nguồn hiện tại khi mở hộp thoại Chọn File hoặc Chọn Thư mục thay vì phải duyệt lại từ Desktop.
+  - Cơ chế dự phòng an toàn (tự động fallback về `FolderBrowserDialog` nếu môi trường Windows bị hạn chế reflection).
+
+### 🐛 Sửa lỗi & Hoàn thiện
+- **Tối ưu Null-Safety & Biến toàn cục:**
+  - Xử lý triệt để kiểm tra biến nullable cục bộ khi trích xuất đường dẫn thư mục gốc trong `_pickFile` và `_pickFolder`.
+  - Thay thế chuỗi phiên bản hardcoded trong `glass_terminal.dart` bằng hằng số `appVersion` tập trung.
+
+### 📦 Phát hành
+- Đồng bộ version 1.2.1+4 trong `pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `config_sample.json`, `USERGUIDE.md`, `README.md`, `RELEASE_NOTES.md`.
+
+---
+
 ## [v1.2.0] - 2026-09-15
 
 ### 🚀 Tính năng & Nâng cấp lớn

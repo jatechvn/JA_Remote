@@ -1406,9 +1406,9 @@ class LanguageProvider extends ChangeNotifier {
       'cn': '就绪待命。选择目标机台并点击“立即执行命令”，或在下方提示符处直接输入命令。',
     },
     'terminal_default_banner': {
-      'vi': 'JA Remote Command Console [Phiên bản 1.2.0]',
-      'en': 'JA Remote Command Console [Version 1.2.0]',
-      'cn': 'JA Remote 命令控制台 [版本 1.2.0]',
+      'vi': 'JA Remote Command Console [Phiên bản 1.2.1]',
+      'en': 'JA Remote Command Console [Version 1.2.1]',
+      'cn': 'JA Remote 命令控制台 [版本 1.2.1]',
     },
     'terminal_default_help_hint': {
       'vi': 'Gõ "help" để xem danh sách các lệnh chẩn đoán và hệ thống.',
