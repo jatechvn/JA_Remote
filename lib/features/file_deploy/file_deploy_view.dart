@@ -183,8 +183,18 @@ class _FileDeployViewState extends State<FileDeployView> {
   }
 
   Future<void> _pickFile(LanguageProvider language) async {
+    final currentPath = _sourcePath;
+    String? initialDir;
+    if (currentPath != null && currentPath.isNotEmpty) {
+      if (File(currentPath).existsSync()) {
+        initialDir = File(currentPath).parent.path;
+      } else if (Directory(currentPath).existsSync()) {
+        initialDir = currentPath;
+      }
+    }
     final path = await FileDialogHelper.pickAnyFile(
       title: language.t('deploy_pick_file_title'),
+      initialDirectory: initialDir,
     );
     if (path != null && mounted) {
       await _loadSourceFromPath(path, false, saveToHistory: true);
@@ -192,8 +202,18 @@ class _FileDeployViewState extends State<FileDeployView> {
   }
 
   Future<void> _pickFolder(LanguageProvider language) async {
+    final currentPath = _sourcePath;
+    String? initialDir;
+    if (currentPath != null && currentPath.isNotEmpty) {
+      if (Directory(currentPath).existsSync()) {
+        initialDir = currentPath;
+      } else if (File(currentPath).existsSync()) {
+        initialDir = File(currentPath).parent.path;
+      }
+    }
     final path = await FileDialogHelper.pickDirectory(
       title: language.t('deploy_pick_folder_title'),
+      initialDirectory: initialDir,
     );
     if (path != null && mounted) {
       await _loadSourceFromPath(path, true, saveToHistory: true);
