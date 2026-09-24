@@ -312,7 +312,7 @@ void main() {
       },
     );
 
-    test('blocks a manifest without a SHA-256 checksum', () async {
+    test('allows update without a SHA-256 checksum', () async {
       final tempServer = await Directory.systemTemp.createTemp(
         'mock_ota_unsigned_',
       );
@@ -335,9 +335,10 @@ void main() {
           overrideCurrentVersion: '1.2.1',
         );
 
-        expect(result.hasUpdate, isFalse);
-        expect(result.isConnectionSuccess, isFalse);
-        expect(result.errorMessage, contains('SHA-256'));
+        expect(result.hasUpdate, isTrue);
+        expect(result.packageInfo, isNotNull);
+        expect(result.packageInfo!.version.toString(), equals('9.9.9'));
+        expect(result.packageInfo!.sha256, isNull);
       } finally {
         service.setCustomServerDirForTesting(null);
         service.setCustomConfigFileForTesting(null);
@@ -407,6 +408,40 @@ void main() {
           expect(result.packageInfo, isNotNull);
           expect(result.packageInfo!.version.toString(), equals('1.3.0'));
           expect(result.packageInfo!.sha256, equals(fakeHash));
+        } finally {
+          service.setCustomServerDirForTesting(null);
+          service.setCustomConfigFileForTesting(null);
+          await tempServer.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'detects update from zip alone without version.json or checksum file (JA_LAN_Messenger behavior)',
+      () async {
+        final tempServer = await Directory.systemTemp.createTemp(
+          'mock_ota_zip_only_',
+        );
+        try {
+          final zipName = 'JA_Remote_v1.3.0_Windows_x64.zip';
+          await File(
+            '${tempServer.path}/$zipName',
+          ).writeAsString('NEW_VERSION_ALONE');
+          service.setCustomServerDirForTesting(tempServer);
+          service.setCustomConfigFileForTesting(
+            File('${tempServer.path}/update_config.json'),
+          );
+
+          final result = await service.checkForUpdates(
+            overrideServerPath: tempServer.path,
+            overrideCurrentVersion: '1.2.1',
+          );
+
+          expect(result.hasUpdate, isTrue);
+          expect(result.errorMessage, isNull);
+          expect(result.packageInfo, isNotNull);
+          expect(result.packageInfo!.version.toString(), equals('1.3.0'));
+          expect(result.packageInfo!.sha256, isNull);
         } finally {
           service.setCustomServerDirForTesting(null);
           service.setCustomConfigFileForTesting(null);

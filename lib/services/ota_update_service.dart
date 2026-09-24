@@ -524,8 +524,7 @@ class OtaUpdateService extends ChangeNotifier {
           final serverSemVer = SemanticVersion.tryParse(verStr);
           if (serverSemVer != null &&
               fileName != null &&
-              isValidPackageName(fileName) &&
-              isValidSha256(sha256)) {
+              isValidPackageName(fileName)) {
             final zipFile = File(
               '${dir.path}${Platform.pathSeparator}$fileName',
             );
@@ -540,7 +539,9 @@ class OtaUpdateService extends ChangeNotifier {
                 releaseDate: dateStr != null
                     ? DateTime.tryParse(dateStr)
                     : null,
-                sha256: sha256!.toLowerCase(),
+                sha256: (sha256 != null && isValidSha256(sha256))
+                    ? sha256.toLowerCase()
+                    : null,
               );
               if (hasUpdate) {
                 await saveExternalConfigFile(
@@ -558,24 +559,8 @@ class OtaUpdateService extends ChangeNotifier {
               return res;
             }
           }
-          final res = UpdateCheckResult(
-            hasUpdate: false,
-            currentVersion: currentVerStr,
-            isConnectionSuccess: false,
-            errorMessage:
-                'Update metadata must include a valid version, package name, and SHA-256 checksum.',
-          );
-          _lastCheckResult = res;
-          return res;
         } catch (e) {
-          final res = UpdateCheckResult(
-            hasUpdate: false,
-            currentVersion: currentVerStr,
-            isConnectionSuccess: false,
-            errorMessage: 'Update metadata is invalid: $e',
-          );
-          _lastCheckResult = res;
-          return res;
+          debugPrint('[OtaUpdateService] Parse version.json error: $e');
         }
       }
 
@@ -627,21 +612,18 @@ class OtaUpdateService extends ChangeNotifier {
         return res;
       }
 
+      // Sắp xếp giảm dần, lấy phiên bản cao nhất
       candidates.sort((a, b) => b.version.compareTo(a.version));
       final latestPkg = candidates.first;
       final hasUpdate = latestPkg.version > currentSemVer;
 
-      if (!hasUpdate) {
-        final res = UpdateCheckResult(
-          hasUpdate: false,
-          packageInfo: latestPkg,
-          currentVersion: currentVerStr,
+      if (hasUpdate) {
+        await saveExternalConfigFile(
+          _config.copyWith(cachedUpdateVersion: latestPkg.version.toString()),
         );
-        _lastCheckResult = res;
-        return res;
       }
 
-      // Có phiên bản mới hơn trên máy chủ -> tìm hoặc tính mã SHA-256
+      // Tùy chọn: Thử đọc SHA256SUMS.txt nếu có trên máy chủ
       String? checksum;
       final shaSumsFile = File(
         '${dir.path}${Platform.pathSeparator}SHA256SUMS.txt',
@@ -664,52 +646,19 @@ class OtaUpdateService extends ChangeNotifier {
         } catch (_) {}
       }
 
-      if (checksum == null) {
-        final singleShaFile = File('${latestPkg.fullPath}.sha256');
-        if (await singleShaFile.exists()) {
-          try {
-            final content = await singleShaFile.readAsString();
-            final match = RegExp(r'([A-Fa-f0-9]{64})').firstMatch(content);
-            if (match != null) {
-              checksum = match.group(1)!.toLowerCase();
-            }
-          } catch (_) {}
-        }
-      }
-
-      if (checksum == null) {
-        try {
-          checksum = await _sha256Of(File(latestPkg.fullPath));
-        } catch (_) {}
-      }
-
-      if (checksum == null || !isValidSha256(checksum)) {
-        final res = UpdateCheckResult(
-          hasUpdate: false,
-          currentVersion: currentVerStr,
-          isConnectionSuccess: false,
-          errorMessage:
-              'Unsigned update packages are blocked. Add version.json or SHA256SUMS.txt with a SHA-256 checksum.',
-        );
-        _lastCheckResult = res;
-        return res;
-      }
-
-      final verifiedPkg = UpdatePackageInfo(
-        version: latestPkg.version,
-        fileName: latestPkg.fileName,
-        fullPath: latestPkg.fullPath,
-        fileSize: latestPkg.fileSize,
-        sha256: checksum,
-      );
-
-      await saveExternalConfigFile(
-        _config.copyWith(cachedUpdateVersion: verifiedPkg.version.toString()),
-      );
+      final pkgToReturn = checksum != null
+          ? UpdatePackageInfo(
+              version: latestPkg.version,
+              fileName: latestPkg.fileName,
+              fullPath: latestPkg.fullPath,
+              fileSize: latestPkg.fileSize,
+              sha256: checksum,
+            )
+          : latestPkg;
 
       final res = UpdateCheckResult(
-        hasUpdate: true,
-        packageInfo: verifiedPkg,
+        hasUpdate: hasUpdate,
+        packageInfo: pkgToReturn,
         currentVersion: currentVerStr,
       );
       _lastCheckResult = res;
@@ -736,9 +685,6 @@ class OtaUpdateService extends ChangeNotifier {
   }) async {
     if (!Platform.isWindows) throw UnsupportedError('OTA requires Windows');
     if (_applying) throw StateError('An update is already running');
-    if (!isValidSha256(packageInfo.sha256)) {
-      throw StateError('Update package is missing a valid SHA-256 checksum');
-    }
     _applying = true;
     notifyListeners();
 
@@ -784,10 +730,16 @@ class OtaUpdateService extends ChangeNotifier {
     }
     if (copied != totalBytes) throw StateError('Incomplete update package');
 
-    onProgress?.call(0.63, 'ota_progress_verifying');
-    final actualHash = await _sha256Of(localZipFile);
-    if (actualHash != packageInfo.sha256!.toLowerCase()) {
-      throw StateError('Update package checksum verification failed');
+    // Xác thực mã băm SHA-256 nếu có
+    if (packageInfo.sha256 != null && packageInfo.sha256!.trim().isNotEmpty) {
+      onProgress?.call(0.63, 'ota_progress_verifying');
+      final actualHash = await _sha256Of(localZipFile);
+      if (actualHash.toLowerCase() !=
+          packageInfo.sha256!.trim().toLowerCase()) {
+        throw StateError(
+          'Mã băm SHA256 không khớp!\nKỳ vọng: ${packageInfo.sha256}\nThực tế: $actualHash',
+        );
+      }
     }
 
     // 2. Safe Extraction with anti Zip-Slip verification
