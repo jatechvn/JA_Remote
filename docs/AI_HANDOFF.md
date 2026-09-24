@@ -1,5 +1,20 @@
 # JA Remote handoff — 2026-09-09
 
+## Network walkthrough verification — 2026-09-24
+
+### Follow-up fixes
+
+- TCP fallback measures each handshake separately and reports the fastest success, while draining all attempts to preserve worker limits and socket cleanup.
+- Netsh parsing uses adjacent numeric address/network-prefix records instead of English labels, validates containment and prefix bounds, and resets pending addresses at intervening records. Adapter discovery now requests missing masks through ipconfig/PowerShell without replacing known netsh masks.
+- Added network_fallback_regression_test.dart: translated labels, invalid/stale prefixes, partial fallback merge, delayed TCP failures and late socket cleanup, all TCP failures. Uses fake sockets/processes; no LAN probes.
+- Validation: analyzer clean, formatted scoped files, 47/47 targeted tests passed, diff whitespace check clean. No Windows Release rebuild or live blocked-ICMP test performed.
+
+- Reviewed Gemini walkthrough f7ca0325-41f7-4b50-a24f-b1806023ea80 against current network_utils.dart, ping_engine.dart and unit_test.dart. Verification only; application source unchanged.
+- Direct Dart analyzer clean; format check for the three scoped files unchanged; test/unit_test.dart 42/42 passed. Did not rerun full suite or verify the walkthrough's historical 225/225 count.
+- Confirmed /21 calculation and eight /24 slices covered. Netsh parser still depends on the English substring `mask`; fallback only runs when the entire map is empty, so partial adapter results cannot be repaired.
+- TCP fallback waits for all seven attempts and records total batch time as latency. A fast successful handshake can therefore display the timeout of unrelated ports and fail the Fast filter. Loopback ping test does not force fallback; no blocked-ICMP integration case exists in the scoped tests.
+- A host with ICMP blocked and none of the seven TCP services reachable remains offline; the walkthrough's 100% detection claim is unsupported. Local read-only netsh timings were 105, 88, 86 ms, not 5 ms. No live subnet sweep, firewall modification, or release build performed.
+
 ## Task
 Fix shortcuts reported inactive after v1.1.0 and check post-update behavior. User runs build/windows/x64/runner/Release/ja_remote.exe.
 
@@ -185,3 +200,12 @@ The working tree already contained command-template/model/repository, command-ru
 - Added injectable local copy hook and local/WinRM-adapter partial-write failure regressions: exact old content restored, unrelated backup preserved, no broad process-kill script. Native lock and corrected mapped-file tests still pass.
 - Targeted suite 17/17; full suite 195/195; analyzer clean. Real remote WinRM/SMB not exercised. Changed service and unlock tests only, plus handoff. No release/tag/push.
 - Windows Release build succeeded (26.5s); diff --check passed.
+
+## OTA LAN Update verification and hardening — 2026-09-21
+
+- Reviewed the new Gemini OTA feature without contacting an SMB share or replacing a running application. Confirmed the original implementation wrote its SMB password as clear text, accepted unsigned ZIPs, and treated a file named `data` as a valid Flutter data directory.
+- OTA configuration now uses the existing per-user Windows DPAPI helper on save and keeps old clear-text configuration readable for one migration save. Default SMB credentials are blank; no credentials are embedded in source.
+- `version.json` now requires `version`, a valid package name, and a 64-character SHA-256. The copied local ZIP is checked with `certutil` before extraction; unsigned packages are blocked. Archive entries are bounded at 5,000 entries and 1 GiB uncompressed. Payload requires `ja_remote.exe`, `flutter_windows.dll`, and a real `data/` directory.
+- Removed unused `autoDownload`/`isManual` configuration contracts and localized OTA progress states in VI/EN/CN. Added `docs/OTA_UPDATE.md` with the required manifest and checksum command.
+- Added OTA regressions for DPAPI persistence, missing checksums, payload type validation, and a real temporary ZIP/checksum/extraction flow. The OTA tests isolate their config from user AppData.
+- Final verification: `flutter analyze` clean; focused OTA/DPAPI 19/19; full suite 222/222; `git diff --check` clean. No real LAN update, SMB credential test, packaged-app update, or production rollback was performed. No build/release/tag/push was requested.

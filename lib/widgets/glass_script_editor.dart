@@ -26,6 +26,7 @@ class GlassScriptEditor extends StatefulWidget {
   final VoidCallback? onClear;
   final List<GlassScriptSnippet>? quickSnippets;
   final ValueChanged<String>? onSelectSnippet;
+  final Widget? extraFooterWidget;
   final bool expands;
   final FocusNode? focusNode;
 
@@ -41,6 +42,7 @@ class GlassScriptEditor extends StatefulWidget {
     this.onClear,
     this.quickSnippets,
     this.onSelectSnippet,
+    this.extraFooterWidget,
     this.expands = false,
     this.focusNode,
   });
@@ -606,6 +608,7 @@ class _GlassScriptEditorState extends State<GlassScriptEditor> {
               ),
             ),
           ],
+          if (widget.extraFooterWidget != null) widget.extraFooterWidget!,
         ],
       ),
     );

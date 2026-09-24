@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:dartssh2/dartssh2.dart';
 import '../core/process/process_runner.dart';
+import '../core/utils/command_variable_resolver.dart';
 import '../data/models/managed_device.dart';
 import '../data/repositories/log_repository.dart';
 
@@ -53,6 +54,7 @@ class RemoteCommandService {
   }
 
   /// Executes a command on a single device (auto selects PowerShell or SSH based on device.os or override).
+  /// Resolves dynamic placeholders (e.g. {{IP}}, {{HOSTNAME}}) and falls back to device-level credentials.
   Future<RemoteCommandResult> execute({
     required ManagedDevice device,
     required String command,
@@ -68,6 +70,22 @@ class RemoteCommandService {
         'Must be positive',
       );
     }
+
+    // Fallback to per-device credentials if not provided globally
+    final effectiveUser = (username != null && username.isNotEmpty)
+        ? username
+        : device.username;
+    final effectivePass = (password != null && password.isNotEmpty)
+        ? password
+        : device.password;
+
+    // Resolve template variables for this target device
+    final resolvedCommand = CommandVariableResolver.resolve(
+      command,
+      device,
+      username: effectiveUser,
+    );
+
     final sw = Stopwatch()..start();
     final type =
         typeOverride ??
@@ -76,18 +94,18 @@ class RemoteCommandService {
     if (type == 'ssh') {
       return _executeSsh(
         device: device,
-        command: command,
-        username: username ?? device.username ?? 'root',
-        password: password ?? '',
+        command: resolvedCommand,
+        username: effectiveUser ?? 'root',
+        password: effectivePass ?? '',
         timeoutSeconds: timeoutSeconds,
         sw: sw,
       );
     } else {
       return _executePowerShell(
         device: device,
-        command: command,
-        username: username ?? device.username,
-        password: password,
+        command: resolvedCommand,
+        username: effectiveUser,
+        password: effectivePass,
         timeoutSeconds: timeoutSeconds,
         sw: sw,
       );

@@ -9,6 +9,7 @@ import '../../data/models/managed_device.dart';
 import '../../services/device_service.dart';
 import '../../services/power_service.dart';
 import '../../services/tool_launcher_service.dart';
+import '../../core/network/port_scan_service.dart';
 import 'port_scanner_dialog.dart';
 
 /// Glass dialog displaying full device details, fast action buttons, and edit options.
@@ -186,6 +187,71 @@ void showDeviceDetailDialog(BuildContext context, ManagedDevice device) {
                               'name': device.name,
                             }),
                             icon: Icons.restart_alt_rounded,
+                          );
+                        }
+                      }
+                    },
+                  ),
+                  // Test Connection
+                  _ActionButton(
+                    label: 'Test Kết nối',
+                    icon: Icons.network_check_rounded,
+                    color: colors.accentCyan,
+                    colors: colors,
+                    onTap: () async {
+                      showAppToast(
+                        context,
+                        colors: colors,
+                        message: 'Đang kiểm tra kết nối tới ${device.ip}...',
+                        icon: Icons.network_check_rounded,
+                      );
+                      final portScanner = PortScanService();
+                      final winrm = await portScanner.testSinglePort(
+                        device.ip,
+                        5985,
+                        timeout: const Duration(milliseconds: 1200),
+                      );
+                      final ssh = await portScanner.testSinglePort(
+                        device.ip,
+                        22,
+                        timeout: const Duration(milliseconds: 1200),
+                      );
+                      if (context.mounted) {
+                        if (winrm.isOpen && ssh.isOpen) {
+                          showAppToast(
+                            context,
+                            colors: colors,
+                            message:
+                                '${device.name}: WinRM (5985) & SSH (22) Online!',
+                            icon: Icons.check_circle_rounded,
+                            accentColor: colors.accentEmerald,
+                          );
+                        } else if (winrm.isOpen) {
+                          showAppToast(
+                            context,
+                            colors: colors,
+                            message:
+                                '${device.name}: WinRM (5985) Online (${winrm.latencyMs}ms)',
+                            icon: Icons.check_circle_rounded,
+                            accentColor: colors.accentEmerald,
+                          );
+                        } else if (ssh.isOpen) {
+                          showAppToast(
+                            context,
+                            colors: colors,
+                            message:
+                                '${device.name}: SSH (22) Online (${ssh.latencyMs}ms)',
+                            icon: Icons.check_circle_rounded,
+                            accentColor: colors.accentEmerald,
+                          );
+                        } else {
+                          showAppToast(
+                            context,
+                            colors: colors,
+                            message:
+                                '${device.name}: Không phản hồi cổng 5985/22',
+                            icon: Icons.error_outline_rounded,
+                            accentColor: colors.accentRose,
                           );
                         }
                       }

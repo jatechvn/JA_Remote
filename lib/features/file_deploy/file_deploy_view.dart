@@ -30,6 +30,8 @@ class _FileDeployViewState extends State<FileDeployView> {
   final _destController = TextEditingController(text: r'C:\Temp\Deploy');
   final _usernameController = TextEditingController(text: 'Administrator');
   final _passwordController = TextEditingController();
+  final _preHookController = TextEditingController();
+  final _postHookController = TextEditingController();
   final _deployService = FileDeployService();
   final _credRepo = CredentialRepository();
   final _terminalController = GlassTerminalController();
@@ -47,9 +49,11 @@ class _FileDeployViewState extends State<FileDeployView> {
   bool _createDirIfMissing = true;
   bool _overwrite = true;
   bool _autoKillIfInUse = true;
+  bool _abortOnPreFail = true;
   int _concurrency = 4;
   bool _obscurePassword = true;
   bool _isAuthExpanded = false;
+  bool _isHooksExpanded = false;
   bool? _isTargetDevicesCollapsedByUser;
 
   @override
@@ -178,6 +182,8 @@ class _FileDeployViewState extends State<FileDeployView> {
     _destController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _preHookController.dispose();
+    _postHookController.dispose();
     _deployService.dispose();
     super.dispose();
   }
@@ -292,6 +298,13 @@ class _FileDeployViewState extends State<FileDeployView> {
       maxConcurrency: _concurrency,
       username: _usernameController.text.trim(),
       password: _passwordController.text,
+      preDeployScript: _preHookController.text.trim().isNotEmpty
+          ? _preHookController.text.trim()
+          : null,
+      postDeployScript: _postHookController.text.trim().isNotEmpty
+          ? _postHookController.text.trim()
+          : null,
+      abortOnPreFail: _abortOnPreFail,
     );
 
     _terminalController.clear();
@@ -1185,6 +1198,183 @@ class _FileDeployViewState extends State<FileDeployView> {
                   ),
                 ),
                 crossFadeState: _isAuthExpanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 200),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Card 4: Pre & Post Deploy Hooks (Collapsible)
+        GlassCard(
+          colors: colors,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                onTap: () =>
+                    setState(() => _isHooksExpanded = !_isHooksExpanded),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.integration_instructions_rounded,
+                        size: 16,
+                        color: colors.accentCyan,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Pre/Post Deploy Hooks',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: colors.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (!_isHooksExpanded &&
+                          (_preHookController.text.isNotEmpty ||
+                              _postHookController.text.isNotEmpty)) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.accentCyan.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: colors.accentCyan.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Text(
+                            'Hooks Active',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: colors.accentCyan,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Icon(
+                        _isHooksExpanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: colors.textMuted,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: Padding(
+                  padding: const EdgeInsets.only(top: 10, bottom: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Pre-deploy script
+                      Text(
+                        'Pre-Deploy Script (e.g. Stop Service, Taskkill):',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _preHookController,
+                        enabled: !_deployService.isRunning,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontFamily: 'monospace',
+                          color: colors.textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText:
+                              'Stop-Service AppService -Force (Supports {{IP}})',
+                          hintStyle: TextStyle(
+                            fontSize: 11,
+                            color: colors.textMuted,
+                          ),
+                          filled: true,
+                          fillColor: colors.cardBg,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: colors.cardBorder),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Post-deploy script
+                      Text(
+                        'Post-Deploy Script (e.g. Start Service, Register DLL):',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _postHookController,
+                        enabled: !_deployService.isRunning,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontFamily: 'monospace',
+                          color: colors.textPrimary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText:
+                              'Start-Service AppService (Supports {{IP}})',
+                          hintStyle: TextStyle(
+                            fontSize: 11,
+                            color: colors.textMuted,
+                          ),
+                          filled: true,
+                          fillColor: colors.cardBg,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: colors.cardBorder),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      _buildCheckboxOption(
+                        label: 'Hủy Deploy nếu Pre-Deploy Script thất bại',
+                        value: _abortOnPreFail,
+                        colors: colors,
+                        onChanged: _deployService.isRunning
+                            ? null
+                            : (val) =>
+                                  setState(() => _abortOnPreFail = val ?? true),
+                      ),
+                    ],
+                  ),
+                ),
+                crossFadeState: _isHooksExpanded
                     ? CrossFadeState.showSecond
                     : CrossFadeState.showFirst,
                 duration: const Duration(milliseconds: 200),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ja_remote/core/network/network_utils.dart';
+import 'package:ja_remote/core/network/ping_engine.dart';
 import 'package:ja_remote/core/network/wake_on_lan.dart';
 import 'package:ja_remote/core/process/process_runner.dart';
 import 'package:ja_remote/data/models/managed_device.dart';
@@ -138,6 +139,83 @@ void main() {
       expect(hosts, contains('172.21.175.40'));
     });
 
+    test(
+      'parseWindowsIpconfigText extracts accurate subnet masks without gateway leaks',
+      () {
+        const sampleIpconfig = '''
+Windows IP Configuration
+
+Ethernet adapter Ethernet 2:
+   Media State . . . . . . . . . . . : Media disconnected
+
+Unknown adapter Tailscale:
+   IPv4 Address. . . . . . . . . . . : 100.124.177.71
+   Subnet Mask . . . . . . . . . . . : 255.255.255.255
+
+Ethernet adapter Ethernet:
+   Connection-specific DNS Suffix  . : cesbg.foxconn
+   IPv4 Address. . . . . . . . . . . : 172.21.173.252
+   Subnet Mask . . . . . . . . . . . : 255.255.248.0
+   Default Gateway . . . . . . . . . : 172.21.168.1
+
+Ethernet adapter Ethernet 3:
+   IPv4 Address. . . . . . . . . . . : 192.168.56.1
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+
+Wireless LAN adapter Wi-Fi:
+   IPv4 Address. . . . . . . . . . . : 192.168.137.249
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+''';
+
+        final map = NetworkUtils.parseWindowsIpconfigText(sampleIpconfig);
+        expect(map['172.21.173.252'], equals('255.255.248.0'));
+        expect(map['192.168.56.1'], equals('255.255.255.0'));
+        expect(map['192.168.137.249'], equals('255.255.255.0'));
+        expect(
+          map.containsKey('172.21.168.1'),
+          isFalse,
+        ); // Gateway must never leak as an IP adapter
+        expect(
+          NetworkUtils.calculateCidrSubnet(
+            '172.21.173.252',
+            map['172.21.173.252'],
+          ),
+          equals('172.21.168.0/21'),
+        );
+      },
+    );
+
+    test(
+      'parseNetshSubnetMasks extracts accurate subnet masks from netsh output',
+      () {
+        const sampleNetsh = '''
+Configuration for interface "Ethernet"
+    DHCP enabled:                         Yes
+    IP Address:                           172.21.172.151
+    Subnet Prefix:                        172.21.168.0/21 (mask 255.255.248.0)
+    Default Gateway:                      172.21.168.1
+    Gateway Metric:                       0
+    InterfaceMetric:                      25
+
+Configuration for interface "Loopback Pseudo-Interface 1"
+    DHCP enabled:                         No
+    IP Address:                           127.0.0.1
+    Subnet Prefix:                        127.0.0.0/8 (mask 255.0.0.0)
+    InterfaceMetric:                      75
+''';
+        final map = NetworkUtils.parseNetshSubnetMasks(sampleNetsh);
+        expect(map['172.21.172.151'], equals('255.255.248.0'));
+        expect(map['127.0.0.1'], equals('255.0.0.0'));
+        expect(
+          NetworkUtils.calculateCidrSubnet(
+            '172.21.172.151',
+            map['172.21.172.151'],
+          ),
+          equals('172.21.168.0/21'),
+        );
+      },
+    );
+
     test('compareIps numerically sorts IPv4 addresses correctly', () {
       expect(
         NetworkUtils.compareIps('172.21.168.2', '172.21.168.10'),
@@ -174,6 +252,13 @@ void main() {
         }
       },
     );
+
+    test('PingEngine pings localhost successfully', () async {
+      final res = await PingEngine.ping('127.0.0.1', timeoutMs: 500);
+      expect(res.isOnline, isTrue);
+      expect(res.latencyMs, isNotNull);
+      expect(res.ip, equals('127.0.0.1'));
+    });
   });
 
   group('WakeOnLan Magic Packet Tests', () {

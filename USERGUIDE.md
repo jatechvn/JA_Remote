@@ -1,8 +1,16 @@
-# Hướng dẫn sử dụng JA Remote v1.2.1
+# Hướng dẫn sử dụng JA Remote v1.3.0
 
-## Cài đặt portable
+## Cài đặt ứng dụng
 
-Giải nén toàn bộ `JA_Remote_v1.2.1_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy EXE. Chạy `debug.bat` khi cần ghi log chẩn đoán. Bản phát hành dành cho Windows x64.
+### 1. Cài đặt 1-Click (Khuyên dùng)
+- Chạy file `install.bat` (hoặc mở cmd chạy `install.bat /silent`).
+- Ứng dụng sẽ tự động được cài đặt vào `%LOCALAPPDATA%\Programs\JA_Remote` (Zero-Admin, không cần quyền Administrator/UAC).
+- Tự động tạo Shortcut trên Desktop (`JA Remote.lnk`) và trong menu Start (`Programs\JA Remote`).
+- Đăng ký mục gỡ cài đặt chính quy trong Windows Settings & Control Panel. Khi muốn gỡ bỏ, bạn có thể gỡ từ Control Panel hoặc chạy `uninstall.bat`.
+
+### 2. Sử dụng bản Portable
+- Giải nén toàn bộ `JA_Remote_v1.3.0_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy trực tiếp `ja_remote.exe`.
+- Chạy `debug.bat` khi cần bật chế độ debug ghi log chẩn đoán và hiển thị badge thời gian build. Bản phát hành dành cho Windows x64.
 
 ## Thiết bị và quét LAN
 
@@ -45,6 +53,20 @@ Giải nén toàn bộ `JA_Remote_v1.2.1_Windows_x64.zip`, giữ nguyên thư m�
    - Cổng 80/443: Mở trang Web quản trị trên trình duyệt mặc định.
    - Cổng 22: Mở phiên SSH terminal.
 
+## Cập nhật ứng dụng qua mạng LAN (LAN OTA Update)
+
+1. **Cấu hình máy chủ cập nhật:**
+   - Nhấn **Ctrl+,** để mở Cài đặt và chuyển sang tab **Cập nhật LAN**.
+   - Nhập đường dẫn thư mục chia sẻ nội bộ SMB/UNC (ví dụ `\\172.21.168.10\share\JA_Remote` hoặc đường dẫn ổ đĩa mạng).
+   - Nếu máy chủ yêu cầu xác thực, nhập Tên đăng nhập và Mật khẩu (thông tin mật khẩu được bảo vệ an toàn bằng két mã hóa Windows DPAPI Vault).
+   - Chọn Chu kỳ kiểm tra tự động: Khởi động, 1 giờ, 6 giờ, 12 giờ, 24 giờ, hoặc Tắt.
+   - Bấm **Kiểm tra kết nối** để xác nhận quyền truy cập máy chủ.
+2. **Kiểm tra & Cập nhật:**
+   - Bấm **Kiểm tra bản cập nhật ngay** để quét bản mới nhất lập tức.
+   - Khi có phiên bản mới, biểu tượng huy hiệu (Badge) màu xanh ngọc sẽ xuất hiện ở góc trên thanh công cụ TopBar. Bấm vào huy hiệu để mở hộp thoại Bento `GlassUpdateDialog`.
+   - Xem Release Notes, dung lượng gói và bấm **Cập nhật ngay**. Quá trình tải xuống và giải nén được xử lý tự động với tiến trình thời gian thực.
+   - Kịch bản `apply_update.bat` sẽ tự động sao lưu phiên bản cũ và nâng cấp an toàn bằng Robocopy, bảo tồn 100% các file cấu hình `config.json`, `credentials.json`, `devices.json`, `logs/`.
+
 ## Phím tắt toàn cục
 
 - **Ctrl+1…5:** Chuyển nhanh 5 tab (Thiết bị, Quét LAN, Commands, File Deploy, Nhật ký).
@@ -62,9 +84,9 @@ Phím theo tab chỉ áp dụng trong màn hình tương ứng; Ctrl+A/C/V trong
 
 ## Cài đặt và dữ liệu
 
-**Ctrl+,** mở Cài đặt gồm Glass Tuning, Quản lý OUI nhà sản xuất MAC, Hướng dẫn sử dụng và About. Ngôn ngữ giao diện hỗ trợ Việt/Anh/Trung. F1 và User Guide trong app hiển thị cùng danh sách phím tắt và tài liệu hướng dẫn.
+**Ctrl+,** mở Cài đặt gồm: Tinh chỉnh hiệu ứng kính (Glass Tuning), Cập nhật LAN (OTA Updates), Quản lý OUI nhà sản xuất MAC, Hướng dẫn sử dụng và About. Ngôn ngữ giao diện hỗ trợ Việt/Anh/Trung. F1 và User Guide trong app hiển thị cùng danh sách phím tắt và tài liệu hướng dẫn.
 
-Danh sách thiết bị và thông tin đăng nhập đã lưu nằm trong thư mục application support của Windows, thư mục con `JA_Remote`. Thông tin đăng nhập được lưu bằng JSON; bảo vệ quyền truy cập tài khoản Windows và không chia sẻ các tệp này. Nhật ký tác vụ giữ tối đa 500 mục trong bộ nhớ của phiên hiện tại.
+Danh sách thiết bị và thông tin đăng nhập đã lưu nằm trong thư mục application support của Windows (`JA_Remote`). Các thông tin nhạy cảm (mật khẩu máy trạm, token và SMB credentials) được mã hóa tại chỗ bằng két bảo mật **Windows Data Protection API (DPAPI)**. Người dùng có thể thiết lập tài khoản đăng nhập ghi đè riêng cho từng thiết bị và chèn biến động `{{host}}`, `{{username}}`, `{{password}}` trong script kịch bản. Nhật ký tác vụ giữ tối đa 500 mục trong bộ nhớ của phiên hiện tại.
 
 Dùng Xuất/Nhập ở tab Thiết bị để sao lưu/khôi phục cấu hình. Kiểm tra nội dung file xuất trước khi chia sẻ. Gói release không chứa thiết bị, tài khoản, cấu hình hoặc log cá nhân.
 

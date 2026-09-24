@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import '../../core/security/dpapi_helper.dart';
 import '../../core/utils/app_storage.dart';
 import '../models/saved_credential.dart';
 
@@ -30,6 +31,7 @@ class CredentialRepository {
   }
 
   /// Loads credentials from persistent storage.
+  /// Automatically decrypts DPAPI-encrypted passwords.
   Future<List<SavedCredential>> loadCredentials() async {
     try {
       final file = await _getStorageFile();
@@ -37,9 +39,11 @@ class CredentialRepository {
         final content = await file.readAsString();
         if (content.trim().isNotEmpty) {
           final List<dynamic> decoded = jsonDecode(content);
-          _cachedCredentials = decoded
-              .map((e) => SavedCredential.fromJson(e as Map<String, dynamic>))
-              .toList();
+          _cachedCredentials = decoded.map((e) {
+            final cred = SavedCredential.fromJson(e as Map<String, dynamic>);
+            // Decrypt DPAPI password if encrypted, or return plain as-is
+            return cred.copyWith(password: DpapiHelper.decrypt(cred.password));
+          }).toList();
           _cachedCredentials.sort((a, b) => b.lastUsed.compareTo(a.lastUsed));
           _isInitialized = true;
           return _cachedCredentials;
@@ -52,14 +56,17 @@ class CredentialRepository {
     return _cachedCredentials;
   }
 
-  /// Saves the current list to disk atomically.
+  /// Saves the current list to disk atomically with DPAPI-encrypted passwords.
   Future<void> saveAll(List<SavedCredential> list) async {
     _cachedCredentials = List.from(list);
     try {
       final file = await _getStorageFile();
-      final jsonStr = jsonEncode(
-        _cachedCredentials.map((e) => e.toJson()).toList(),
-      );
+      final toSave = _cachedCredentials.map((e) {
+        final encryptedPass = DpapiHelper.encrypt(e.password);
+        return e.copyWith(password: encryptedPass).toJson();
+      }).toList();
+
+      final jsonStr = jsonEncode(toSave);
       final tempFile = File('${file.path}.tmp');
       await tempFile.writeAsString(jsonStr, flush: true);
       if (await file.exists()) {

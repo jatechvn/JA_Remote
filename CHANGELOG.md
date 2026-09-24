@@ -1,5 +1,37 @@
 # CHANGELOG — JA Remote
 
+## [v1.3.0] - 2026-09-24
+
+### 🚀 Tính năng & Nâng cấp lớn
+- **Hệ thống Cập nhật Mạng LAN (LAN Over-The-Air OTA Updates):**
+  - Tự động phát hiện và tải bản cập nhật từ máy chủ chia sẻ nội bộ SMB/UNC (`\\server\share\...`) với xác thực `net use` ẩn mật khẩu.
+  - Bảo mật tuyệt đối: mã hóa thông tin xác thực SMB lưu trữ qua Windows DPAPI, kiểm tra mã băm SHA-256 bằng `certutil`, phòng chống tấn công Zip-Slip và kiểm tra cấu trúc payload (`ja_remote.exe`, `flutter_windows.dll`, `data/`).
+  - Kịch bản tự bàn giao cập nhật độc lập `apply_update.bat` chạy nền tách biệt (`detached`), tự động sao lưu bản cũ, nâng cấp nguyên tử bằng Robocopy với quy tắc loại trừ bảo tồn 100% dữ liệu người dùng (`logs`, `config.json`, `credentials.json`, `devices.json`, `update_config.json`, v.v.), tự khôi phục (rollback) khi có sự cố và khởi động lại app mới.
+  - Giao diện Bento Frosted Glass `GlassUpdateDialog` hiển thị version diff, dung lượng gói, vùng cuộn Release Notes markdown và thanh tiến trình tải xuống thời gian thực.
+  - Thêm tab "Cập nhật LAN" trong hộp thoại Cài đặt (cho phép cấu hình đường dẫn server, credentials, chu kỳ kiểm tra, test kết nối) và huy hiệu thông báo bản mới (TopBar OTA Badge) sinh động trên thanh tiêu đề.
+- **Bộ Cài đặt & Gỡ bỏ Chuẩn Windows (Zero-Admin Installer Suite):**
+  - `install.bat`: Bộ cài đặt 1-click vào `%LOCALAPPDATA%\Programs\JA_Remote` (Zero-Admin, không cần quyền UAC), kiểm tra ứng dụng đang chạy, tự động sao lưu và bảo tồn dữ liệu người dùng, tạo shortcut Desktop, Start Menu và đăng ký chính quy trong Control Panel & Windows Settings (`Uninstall\JA_Remote`). Hỗ trợ cờ chạy ngầm `/silent` hoặc `/s`.
+  - `uninstall.bat` & `uninstall.ps1`: Kịch bản staging wrapper tự sao chép qua `%TEMP%` để xóa sạch toàn bộ thư mục cài đặt mà không bị Windows khóa file batch; bảo vệ chống chạy nhầm trên thư mục portable/source; xác nhận tương tác tùy chọn xóa dữ liệu cá nhân (`purge`); đóng an toàn tiến trình đang chạy và dọn dẹp shortcuts, Run key và Registry.
+  - Kiểm thử tự động cách ly trong môi trường sandbox (`test/installer_scripts_test.dart`).
+- **Bảo mật Tài khoản & Két thông tin đăng nhập (Windows DPAPI Vault):**
+  - Bảo vệ các thông tin xác thực nhạy cảm lưu trữ bằng Windows Data Protection API (DPAPI).
+  - Hỗ trợ thiết lập thông tin xác thực ghi đè riêng biệt cho từng thiết bị (Per-Device Credential Overrides) bên cạnh tài khoản mặc định.
+  - Bổ sung bộ biến động kịch bản (Dynamic Command Variables): `{{host}}`, `{{username}}`, `{{password}}`, `{{device_name}}`.
+- **Tối ưu Subnet Scanner & Ping Engine Fallback:**
+  - Cải tiến logic nhận diện netmask qua `netsh` và `ipconfig`, khắc phục hiện tượng quét sót dải IP trên các supernet lớn (như /21).
+  - Cơ chế đo đạc TCP fallback độc lập từng cổng giúp phát hiện máy trạm chính xác và thu hồi socket sạch sẽ.
+
+### 🐛 Sửa lỗi & Hoàn thiện
+- **Chuẩn hóa Đóng gói & Kỹ năng `dart-build-pro`:**
+  - Cập nhật kịch bản `build.bat` tự động copy `install.bat`, `uninstall.bat`, `uninstall.ps1` vào `Release/`, bung sẵn ra `dist/` và đóng gói vào release ZIP.
+  - Đồng bộ chuẩn hóa toàn bộ 4 thư mục skill: `.agents/skills/`, `skills/`, `.claude/skills/`, `.codex/skills/`.
+- **Đa ngôn ngữ hoàn thiện:** Bổ sung đầy đủ các chuỗi dịch thuật OTA và Installer cho cả 3 ngôn ngữ Tiếng Việt (VI), English (EN) và 中文 (CN).
+
+### 📦 Phát hành
+- Đồng bộ version 1.3.0+5 trong `pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `install.bat`, `build.bat`, `USERGUIDE.md`, `README.md`, `RELEASE_NOTES.md`.
+
+---
+
 ## [v1.2.1] - 2026-09-16
 
 ### 🚀 Nâng cấp & Tối ưu hóa

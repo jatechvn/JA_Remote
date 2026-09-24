@@ -1950,5 +1950,161 @@ class LanguageProvider extends ChangeNotifier {
       'en': 'Port Scan',
       'cn': '端口扫描',
     },
+    'settings_tab_ota': {
+      'vi': 'Cập nhật LAN',
+      'en': 'LAN Update',
+      'cn': '局域网更新',
+    },
+    'ota_update_title': {
+      'vi': 'Cập nhật phần mềm tự động (OTA LAN)',
+      'en': 'Automatic LAN OTA Update',
+      'cn': '局域网自动更新 (OTA)',
+    },
+    'ota_update_desc': {
+      'vi':
+          'Tự động kiểm tra và nâng cấp phiên bản mới qua thư mục chia sẻ mạng LAN',
+      'en':
+          'Automatically check and upgrade to the latest version via LAN shared folders',
+      'cn': '通过局域网共享文件夹自动检查并升级到最新版本',
+    },
+    'ota_current_version': {
+      'vi': 'Phiên bản hiện tại',
+      'en': 'Current Version',
+      'cn': '当前版本',
+    },
+    'ota_last_check': {
+      'vi': 'Lần kiểm tra cuối',
+      'en': 'Last Checked',
+      'cn': '上次检查',
+    },
+    'ota_never_checked': {
+      'vi': 'Chưa kiểm tra bao giờ',
+      'en': 'Never checked',
+      'cn': '从未检查',
+    },
+    'ota_check_now': {
+      'vi': 'Kiểm tra cập nhật ngay',
+      'en': 'Check for Updates Now',
+      'cn': '立即检查更新',
+    },
+    'ota_checking': {
+      'vi': 'Đang kiểm tra...',
+      'en': 'Checking...',
+      'cn': '正在检查...',
+    },
+    'ota_server_path': {
+      'vi': 'Đường dẫn thư mục máy chủ (SMB / UNC / Local)',
+      'en': 'Server Share Path (SMB / UNC / Local)',
+      'cn': '服务器共享路径 (SMB / UNC / 本地)',
+    },
+    'ota_server_path_hint': {
+      'vi': r'Ví dụ: \\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_Remote',
+      'en': r'e.g. \\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_Remote',
+      'cn': r'例如: \\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_Remote',
+    },
+    'ota_username': {
+      'vi': 'Tài khoản SMB (nếu có)',
+      'en': 'SMB Username (optional)',
+      'cn': 'SMB 用户名 (可选)',
+    },
+    'ota_password': {
+      'vi': 'Mật khẩu SMB (nếu có)',
+      'en': 'SMB Password (optional)',
+      'cn': 'SMB 密码 (可选)',
+    },
+    'ota_interval': {
+      'vi': 'Chu kỳ tự động kiểm tra',
+      'en': 'Automatic Check Interval',
+      'cn': '自动检查周期',
+    },
+    'ota_interval_daily': {'vi': 'Hàng ngày', 'en': 'Daily', 'cn': '每天'},
+    'ota_interval_weekly': {'vi': 'Hàng tuần', 'en': 'Weekly', 'cn': '每周'},
+    'ota_interval_monthly': {'vi': 'Hàng tháng', 'en': 'Monthly', 'cn': '每月'},
+    'ota_interval_off': {
+      'vi': 'Tắt kiểm tra tự động',
+      'en': 'Off (Manual only)',
+      'cn': '关闭自动检查',
+    },
+    'ota_test_connection': {
+      'vi': 'Kiểm tra kết nối',
+      'en': 'Test Connection',
+      'cn': '测试连接',
+    },
+    'ota_testing_connection': {
+      'vi': 'Đang kết nối...',
+      'en': 'Testing...',
+      'cn': '正在连接...',
+    },
+    'ota_connection_ok': {
+      'vi': 'Kết nối máy chủ thành công!',
+      'en': 'Server connection successful!',
+      'cn': '服务器连接成功！',
+    },
+    'ota_connection_failed': {
+      'vi': 'Không thể kết nối máy chủ',
+      'en': 'Cannot connect to server',
+      'cn': '无法连接到服务器',
+    },
+    'ota_open_config_dir': {
+      'vi': 'Mở thư mục cấu hình',
+      'en': 'Open Config Folder',
+      'cn': '打开配置文件目录',
+    },
+    'ota_package_size': {
+      'vi': 'Dung lượng',
+      'en': 'Package Size',
+      'cn': '文件大小',
+    },
+    'ota_release_notes': {
+      'vi': 'Ghi chú phát hành & Thay đổi',
+      'en': 'Release Notes & Changelog',
+      'cn': '版本更新日志',
+    },
+    'ota_downloading': {
+      'vi': 'Đang tải bản cập nhật...',
+      'en': 'Downloading update...',
+      'cn': '正在下载更新...',
+    },
+    'ota_progress_preparing': {
+      'vi': 'Đang chuẩn bị cập nhật...',
+      'en': 'Preparing update...',
+      'cn': '正在准备更新...',
+    },
+    'ota_progress_verifying': {
+      'vi': 'Đang xác thực gói cập nhật...',
+      'en': 'Verifying update package...',
+      'cn': '正在验证更新包...',
+    },
+    'ota_progress_extracting': {
+      'vi': 'Đang giải nén và kiểm tra tệp...',
+      'en': 'Extracting and checking files...',
+      'cn': '正在解压并检查文件...',
+    },
+    'ota_progress_handoff': {
+      'vi': 'Đang chuẩn bị áp dụng cập nhật...',
+      'en': 'Preparing to apply update...',
+      'cn': '正在准备应用更新...',
+    },
+    'ota_ready_restart': {
+      'vi': 'Đã sẵn sàng! Khởi động lại ngay...',
+      'en': 'Ready to apply! Restarting...',
+      'cn': '准备就绪！正在重启...',
+    },
+    'ota_btn_update_now': {
+      'vi': 'Cập nhật ngay',
+      'en': 'Update Now',
+      'cn': '立即更新',
+    },
+    'ota_btn_later': {'vi': 'Để sau', 'en': 'Later', 'cn': '稍后再说'},
+    'ota_up_to_date': {
+      'vi': 'Bạn đang sử dụng phiên bản mới nhất.',
+      'en': 'You are already on the latest version.',
+      'cn': '您当前使用的是最新版本。',
+    },
+    'ota_update_available': {
+      'vi': 'Phát hiện phiên bản mới: {version}',
+      'en': 'New version available: {version}',
+      'cn': '发现新版本: {version}',
+    },
   };
 }

@@ -356,5 +356,84 @@ void main() {
       expect(service.isRunning, isFalse);
       expect(service.progressMap[target.id]?.status, DeployStatus.cancelled);
     });
+
+    test(
+      'executes Pre and Post deploy hooks and aborts on pre-deploy failure if configured',
+      () async {
+        final executedScripts = <String>[];
+        var failPreHook = true;
+
+        final service = FileDeployService(
+          runPowerShell:
+              (
+                script, {
+                computerName,
+                username,
+                password,
+                timeoutSeconds = 15,
+              }) async {
+                executedScripts.add(script);
+                if (script.contains('pre_deploy_test') && failPreHook) {
+                  return const ProcessExecutionResult(
+                    exitCode: 1,
+                    stdout: '',
+                    stderr: 'Pre hook failed',
+                    isSuccess: false,
+                  );
+                }
+                return const ProcessExecutionResult(
+                  exitCode: 0,
+                  stdout: 'DEPLOY_SUCCESS',
+                  stderr: '',
+                  isSuccess: true,
+                );
+              },
+        );
+        addTearDown(service.dispose);
+
+        final target = ManagedDevice(
+          id: 'win-hook',
+          name: 'Hook Target',
+          hostname: 'hooktarget',
+          ip: '192.168.1.150',
+          os: 'windows',
+        );
+
+        final config = FileDeployJobConfig(
+          sourcePath: sampleFile.path,
+          destDir: r'C:\Temp\Deploy',
+          preDeployScript: 'echo pre_deploy_test for {{IP}}',
+          postDeployScript: 'echo post_deploy_test for {{IP}}',
+          abortOnPreFail: true,
+        );
+
+        // 1. Should fail because pre-deploy hook fails
+        await service.startDeploy(targets: [target], config: config);
+        expect(service.failedCount, 1);
+        expect(service.progressMap[target.id]?.status, DeployStatus.failed);
+        expect(
+          service.progressMap[target.id]?.error,
+          contains('Pre-deploy hook failed'),
+        );
+
+        // 2. Should succeed when pre-hook succeeds
+        failPreHook = false;
+        executedScripts.clear();
+        await service.startDeploy(targets: [target], config: config);
+        expect(service.completedCount, 1);
+        expect(
+          executedScripts.any(
+            (s) => s.contains('echo pre_deploy_test for 192.168.1.150'),
+          ),
+          isTrue,
+        );
+        expect(
+          executedScripts.any(
+            (s) => s.contains('echo post_deploy_test for 192.168.1.150'),
+          ),
+          isTrue,
+        );
+      },
+    );
   });
 }

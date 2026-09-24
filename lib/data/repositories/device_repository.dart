@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import '../../core/security/dpapi_helper.dart';
 import '../../core/utils/app_storage.dart';
 import '../models/managed_device.dart';
 
@@ -31,9 +32,13 @@ class DeviceRepository {
         final content = await file.readAsString();
         if (content.trim().isNotEmpty) {
           final List<dynamic> decoded = jsonDecode(content);
-          _cachedDevices = decoded
-              .map((e) => ManagedDevice.fromJson(e as Map<String, dynamic>))
-              .toList();
+          _cachedDevices = decoded.map((e) {
+            final dev = ManagedDevice.fromJson(e as Map<String, dynamic>);
+            if (dev.password != null && dev.password!.isNotEmpty) {
+              return dev.copyWith(password: DpapiHelper.decrypt(dev.password!));
+            }
+            return dev;
+          }).toList();
           _isInitialized = true;
           return _cachedDevices;
         }
@@ -52,9 +57,16 @@ class DeviceRepository {
     _cachedDevices = List.from(devices);
     try {
       final file = await _getStorageFile();
-      final jsonStr = jsonEncode(
-        _cachedDevices.map((e) => e.toJson()).toList(),
-      );
+      final toSave = _cachedDevices.map((d) {
+        if (d.password != null && d.password!.isNotEmpty) {
+          return d
+              .copyWith(password: DpapiHelper.encrypt(d.password!))
+              .toJson();
+        }
+        return d.toJson();
+      }).toList();
+
+      final jsonStr = jsonEncode(toSave);
       // Atomic write using temporary file
       final tempFile = File('${file.path}.tmp');
       await tempFile.writeAsString(jsonStr, flush: true);

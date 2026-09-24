@@ -17,6 +17,7 @@ import '../../data/repositories/command_template_repository.dart';
 import '../../services/device_service.dart';
 import '../../services/remote_command_service.dart';
 import '../../services/config_backup_service.dart';
+import '../../core/utils/command_variable_resolver.dart';
 import '../../core/utils/file_dialog_helper.dart';
 
 class CommandRunnerView extends StatefulWidget {
@@ -1761,6 +1762,111 @@ class _CommandRunnerViewState extends State<CommandRunnerView> {
                                   icon: Icons.restart_alt_rounded,
                                 ),
                               ],
+                        extraFooterWidget: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF1F5F9),
+                            border: Border(
+                              top: BorderSide(
+                                color: colors.cardBorder.withValues(alpha: 0.5),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.data_object_rounded,
+                                  size: 13,
+                                  color: colors.accentCyan,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Variables:',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                for (final v
+                                    in CommandVariableResolver
+                                        .availableVariables) ...[
+                                  InkWell(
+                                    onTap: () {
+                                      final token = v['token']!;
+                                      final text = _commandController.text;
+                                      final selection =
+                                          _commandController.selection;
+                                      if (selection.start >= 0 &&
+                                          selection.end >= 0) {
+                                        final newText = text.replaceRange(
+                                          selection.start,
+                                          selection.end,
+                                          token,
+                                        );
+                                        _commandController
+                                            .value = TextEditingValue(
+                                          text: newText,
+                                          selection: TextSelection.collapsed(
+                                            offset:
+                                                selection.start + token.length,
+                                          ),
+                                        );
+                                      } else {
+                                        _commandController.text = text.isEmpty
+                                            ? token
+                                            : '$text $token';
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(5),
+                                    child: Tooltip(
+                                      message: '${v['label']}: ${v['desc']}',
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: colors.accentCyan.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            5,
+                                          ),
+                                          border: Border.all(
+                                            color: colors.accentCyan.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          v['token']!,
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontFamily: 'monospace',
+                                            fontWeight: FontWeight.bold,
+                                            color: colors.accentCyan,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
 
