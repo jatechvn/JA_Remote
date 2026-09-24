@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:path/path.dart' as p;
 import '../core/process/process_runner.dart';
+import '../core/utils/command_variable_resolver.dart';
 import '../data/models/managed_device.dart';
 import '../data/repositories/log_repository.dart';
 
@@ -107,6 +108,9 @@ class FileDeployJobConfig {
   final String? username;
   final String? password;
   final int timeoutSeconds;
+  final String? preDeployScript;
+  final String? postDeployScript;
+  final bool abortOnPreFail;
 
   const FileDeployJobConfig({
     required this.sourcePath,
@@ -119,6 +123,9 @@ class FileDeployJobConfig {
     this.username,
     this.password,
     this.timeoutSeconds = 120,
+    this.preDeployScript,
+    this.postDeployScript,
+    this.abortOnPreFail = true,
   });
 }
 
@@ -455,10 +462,110 @@ class FileDeployService extends ChangeNotifier {
 
     try {
       final isLinux = device.os.toLowerCase() == 'linux';
+      final effectiveUser = config.username ?? device.username;
+      final effectivePass = config.password ?? device.password;
+
+      // 1. Pre-deploy Hook Execution
+      if (config.preDeployScript != null &&
+          config.preDeployScript!.trim().isNotEmpty) {
+        _log('⚡ [${device.ip}] Executing Pre-deploy hook...');
+        final preScript = CommandVariableResolver.resolve(
+          config.preDeployScript!,
+          device,
+          username: effectiveUser,
+        );
+        try {
+          if (isLinux) {
+            final client = await _connectSsh(
+              device,
+              effectiveUser ?? 'root',
+              effectivePass ?? '',
+              Duration(seconds: 30),
+            );
+            try {
+              final session = await client.execute(preScript);
+              await session.done;
+              if (session.exitCode != 0 && config.abortOnPreFail) {
+                throw Exception(
+                  'Pre-deploy hook exited with code ${session.exitCode}',
+                );
+              }
+            } finally {
+              client.close();
+            }
+          } else {
+            final isLocal =
+                device.ip == '127.0.0.1' ||
+                device.ip.toLowerCase() == 'localhost';
+            final res = await _runPowerShell(
+              preScript,
+              computerName: isLocal ? null : device.ip,
+              username: effectiveUser,
+              password: effectivePass,
+              timeoutSeconds: 30,
+            );
+            if (!res.isSuccess && config.abortOnPreFail) {
+              throw Exception('Pre-deploy hook failed: ${res.stderr}');
+            }
+          }
+        } catch (e) {
+          if (config.abortOnPreFail) {
+            rethrow;
+          } else {
+            _log('⚠️ [${device.ip}] Pre-deploy hook warning (ignored): $e');
+          }
+        }
+      }
+
+      if (_abortRequested) return;
+
+      // 2. File Transfer
       if (isLinux) {
         await _deployLinuxSftp(device, config, sw);
       } else {
         await _deployWindows(device, config, sw);
+      }
+
+      if (_abortRequested) return;
+
+      // 3. Post-deploy Hook Execution
+      if (config.postDeployScript != null &&
+          config.postDeployScript!.trim().isNotEmpty) {
+        _log('⚡ [${device.ip}] Executing Post-deploy hook...');
+        final postScript = CommandVariableResolver.resolve(
+          config.postDeployScript!,
+          device,
+          username: effectiveUser,
+        );
+        try {
+          if (isLinux) {
+            final client = await _connectSsh(
+              device,
+              effectiveUser ?? 'root',
+              effectivePass ?? '',
+              Duration(seconds: 30),
+            );
+            try {
+              final session = await client.execute(postScript);
+              await session.done;
+            } finally {
+              client.close();
+            }
+          } else {
+            final isLocal =
+                device.ip == '127.0.0.1' ||
+                device.ip.toLowerCase() == 'localhost';
+            await _runPowerShell(
+              postScript,
+              computerName: isLocal ? null : device.ip,
+              username: effectiveUser,
+              password: effectivePass,
+              timeoutSeconds: 30,
+            );
+          }
+        } catch (e) {
+          _log('⚠️ [${device.ip}] Post-deploy hook warning: $e');
+        }
       }
 
       if (_abortRequested) return;

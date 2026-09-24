@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 /// Details of a detected network interface on the host machine.
@@ -211,28 +212,173 @@ class NetworkUtils {
     return slices;
   }
 
-  /// Fast helper to read actual IPv4 Subnet Masks from Windows network stack.
-  static Future<Map<String, String>> _getWindowsSubnetMasks() async {
+  /// Parses ipconfig standard output line-by-line to extract IPv4 to Subnet Mask mappings safely.
+  static Map<String, String> parseWindowsIpconfigText(String text) {
     final Map<String, String> map = {};
-    if (!Platform.isWindows) return map;
+    final lines = text.split(RegExp(r'\r?\n'));
+    String? pendingIp;
+    int linesSinceIp = 0;
 
-    try {
-      final res = await Process.run('ipconfig', [], runInShell: false);
-      if (res.exitCode == 0) {
-        final text = res.stdout.toString();
-        // Regex matches an IPv4 followed by a Subnet Mask (255.x.x.x) within 250 characters
-        final blockRegex = RegExp(
-          r'(\d{1,3}(?:\.\d{1,3}){3})[\s\S]{1,250}?(255\.\d{1,3}\.\d{1,3}\.\d{1,3})',
-        );
-        for (final match in blockRegex.allMatches(text)) {
-          final ip = match.group(1)!;
-          final mask = match.group(2)!;
-          if (!map.containsKey(ip) && isValidIp(ip) && !ip.startsWith('255.')) {
-            map[ip] = mask;
-          }
+    for (final line in lines) {
+      final ipMatch = RegExp(
+        r'(?:IPv4 Address|IPv4|IP-Adresse|Adresse IPv4|Direcci[oó]n IPv4)[ .]*:[^\d]*(\d{1,3}(?:\.\d{1,3}){3})',
+        caseSensitive: false,
+      ).firstMatch(line);
+
+      if (ipMatch != null) {
+        final ip = ipMatch.group(1)!;
+        if (isValidIp(ip) && !ip.startsWith('255.')) {
+          pendingIp = ip;
+          linesSinceIp = 0;
+        }
+        continue;
+      }
+
+      if (pendingIp != null) {
+        linesSinceIp++;
+        final maskMatch = RegExp(
+          r'(?:Subnet Mask|Mask|Subnetzmaske|Masque de sous-r[eé]seau|M[aá]scara de subred)[ .]*:[^\d]*(255\.\d{1,3}\.\d{1,3}\.\d{1,3})',
+          caseSensitive: false,
+        ).firstMatch(line);
+
+        if (maskMatch != null) {
+          final mask = maskMatch.group(1)!;
+          map[pendingIp] = mask;
+          pendingIp = null;
+        } else if (linesSinceIp > 5 || line.toLowerCase().contains('adapter')) {
+          pendingIp = null;
         }
       }
+    }
+
+    return map;
+  }
+
+  /// Parses netsh standard output line-by-line to extract IPv4 to Subnet Mask mappings safely.
+  static Map<String, String> parseNetshSubnetMasks(String text) {
+    final masks = <String, String>{};
+    String? currentIp;
+    final addressRegex = RegExp(r'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])');
+    for (final line in const LineSplitter().convert(text)) {
+      final trimmed = line.trim();
+      // Netsh emits an address followed by its numeric network/prefix.
+      // Parse that structure without depending on translated field labels.
+      final prefixMatch = RegExp(
+        r'(?<![\d.])((?:\d{1,3}\.){3}\d{1,3})/(\d{1,2})(?!\d)',
+      ).firstMatch(trimmed);
+      if (prefixMatch != null) {
+        final prefix = int.parse(prefixMatch.group(2)!);
+        final network = prefixMatch.group(1)!;
+        if (currentIp != null && prefix <= 32 && isValidIp(network)) {
+          final bits = prefix == 0
+              ? 0
+              : (0xffffffff << (32 - prefix)) & 0xffffffff;
+          final mask = [
+            24,
+            16,
+            8,
+            0,
+          ].map((shift) => (bits >> shift) & 255).join('.');
+          if (calculateCidrSubnet(currentIp, mask) == '$network/$prefix') {
+            masks[currentIp] = mask;
+          }
+        }
+        currentIp = null;
+        continue;
+      }
+      final addresses = addressRegex
+          .allMatches(trimmed)
+          .map((m) => m.group(0)!)
+          .where(isValidIp)
+          .toList();
+      currentIp = addresses.length == 1 ? addresses.single : null;
+    }
+    return masks;
+  }
+
+  /// Fast helper to read actual IPv4 Subnet Masks from Windows network stack.
+  static Future<Map<String, String>> getWindowsSubnetMasks(
+    Set<String> requiredIps, {
+    Future<ProcessResult> Function(String, List<String>)? run,
+  }) async {
+    Map<String, String> map = {};
+    if (!Platform.isWindows) return map;
+    final execute =
+        run ??
+        (String command, List<String> args) =>
+            Process.run(command, args, runInShell: false);
+
+    bool incomplete() => requiredIps.any((ip) => !map.containsKey(ip));
+
+    // 1. Try netsh first without a PowerShell dependency.
+    try {
+      final res = await execute('netsh', [
+        'interface',
+        'ipv4',
+        'show',
+        'addresses',
+      ]).timeout(const Duration(seconds: 3));
+      if (res.exitCode == 0) {
+        map.addAll(parseNetshSubnetMasks(res.stdout.toString()));
+      }
     } catch (_) {}
+
+    // 2. Fallback via ipconfig
+    if (incomplete()) {
+      try {
+        final res = await execute(
+          'ipconfig',
+          [],
+        ).timeout(const Duration(seconds: 3));
+        if (res.exitCode == 0) {
+          for (final entry in parseWindowsIpconfigText(
+            res.stdout.toString(),
+          ).entries) {
+            map.putIfAbsent(entry.key, () => entry.value);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback via PowerShell if ipconfig gave no results (e.g. specialized locale)
+    if (incomplete()) {
+      try {
+        final psRes = await execute('powershell', [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          r'Get-NetIPAddress -AddressFamily IPv4 | ForEach-Object { "$($_.IPAddress)/$($_.PrefixLength)" }',
+        ]).timeout(const Duration(seconds: 5));
+        if (psRes.exitCode == 0) {
+          final outLines = psRes.stdout.toString().split(RegExp(r'\r?\n'));
+          for (final line in outLines) {
+            final trimmed = line.trim();
+            if (trimmed.contains('/')) {
+              final parts = trimmed.split('/');
+              final ip = parts[0].trim();
+              final prefix = int.tryParse(parts[1].trim());
+              if (prefix != null &&
+                  prefix >= 0 &&
+                  prefix <= 32 &&
+                  isValidIp(ip) &&
+                  !ip.startsWith('127.') &&
+                  !ip.startsWith('169.254.')) {
+                // Convert prefix length back to dotted subnet mask
+                final maskInt = prefix == 0
+                    ? 0
+                    : (~0 << (32 - prefix)) & 0xFFFFFFFF;
+                final o1 = (maskInt >> 24) & 0xFF;
+                final o2 = (maskInt >> 16) & 0xFF;
+                final o3 = (maskInt >> 8) & 0xFF;
+                final o4 = maskInt & 0xFF;
+                map.putIfAbsent(ip, () => '$o1.$o2.$o3.$o4');
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     return map;
   }
 
@@ -240,11 +386,16 @@ class NetworkUtils {
   static Future<List<NetworkInterfaceDetails>> getAvailableAdapters() async {
     final List<NetworkInterfaceDetails> list = [];
     try {
-      final netmasks = await _getWindowsSubnetMasks();
       final interfaces = await NetworkInterface.list(
         includeLoopback: false,
         type: InternetAddressType.IPv4,
       );
+      final requiredIps = interfaces
+          .expand((iface) => iface.addresses)
+          .map((addr) => addr.address)
+          .where((ip) => !ip.startsWith('127.') && !ip.startsWith('169.254.'))
+          .toSet();
+      final netmasks = await getWindowsSubnetMasks(requiredIps);
 
       for (final iface in interfaces) {
         for (final addr in iface.addresses) {

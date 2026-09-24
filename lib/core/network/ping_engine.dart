@@ -55,10 +55,12 @@ class PingEngine {
         }
         return PingResult(ip: ip, isOnline: true, latencyMs: latency);
       }
-      return PingResult(ip: ip, isOnline: false);
+      // If ICMP ping failed (e.g. firewall blocked ICMP Echo Request),
+      // try TCP socket fallback to common office LAN & admin ports
+      return pingTcp(ip, timeoutMs: timeoutMs);
     } catch (e) {
       // Fallback socket ping check if process execution fails
-      return _pingSocketFallback(ip, timeoutMs);
+      return pingTcp(ip, timeoutMs: timeoutMs);
     }
   }
 
@@ -77,37 +79,47 @@ class PingEngine {
         }
         return PingResult(ip: ip, isOnline: true, latencyMs: latency);
       }
-      return PingResult(ip: ip, isOnline: false);
+      return pingTcp(ip, timeoutMs: timeoutMs);
     } catch (e) {
-      return _pingSocketFallback(ip, timeoutMs);
+      return pingTcp(ip, timeoutMs: timeoutMs);
     }
   }
 
-  /// TCP handshake fallback on common ports (135 RPC, 445 SMB, 22 SSH, 80 HTTP, 3389 RDP)
-  static Future<PingResult> _pingSocketFallback(
-    String ip,
-    int timeoutMs,
-  ) async {
-    final stopwatch = Stopwatch()..start();
-    final ports = [135, 445, 3389, 22, 80];
-    for (final port in ports) {
-      try {
-        final socket = await Socket.connect(
-          ip,
-          port,
-          timeout: Duration(
-            milliseconds: (timeoutMs / ports.length).round().clamp(50, 200),
-          ),
-        );
-        stopwatch.stop();
-        socket.destroy();
-        return PingResult(
-          ip: ip,
-          isOnline: true,
-          latencyMs: stopwatch.elapsedMilliseconds.clamp(1, 9999),
-        );
-      } catch (_) {}
-    }
+  /// TCP handshake fallback on common office LAN & management ports:
+  /// 6475 (JA LAN Messenger), 5985 (WinRM), 445 (SMB), 135 (RPC), 3389 (RDP), 22 (SSH), 80 (HTTP)
+  static Future<PingResult> pingTcp(
+    String ip, {
+    int timeoutMs = 400,
+    Future<Socket> Function(String ip, int port, Duration timeout)? connect,
+  }) async {
+    if (timeoutMs < 1) throw ArgumentError('Timeout must be positive');
+    final open =
+        connect ??
+        (String host, int port, Duration timeout) =>
+            Socket.connect(host, port, timeout: timeout);
+    const ports = [6475, 5985, 445, 135, 3389, 22, 80];
+    final socketTimeout = Duration(milliseconds: timeoutMs.clamp(100, 250));
+
+    try {
+      final futures = ports.map((port) async {
+        final stopwatch = Stopwatch()..start();
+        try {
+          final socket = await open(ip, port, socketTimeout);
+          stopwatch.stop();
+          socket.destroy();
+          return stopwatch.elapsedMilliseconds.clamp(1, 9999);
+        } catch (_) {
+          return null;
+        }
+      });
+      final results = await Future.wait(futures);
+      // Drain all attempts to preserve the batch concurrency limit and close
+      // every socket; latency is the fastest successful handshake only.
+      final latencies = results.whereType<int>().toList()..sort();
+      if (latencies.isNotEmpty) {
+        return PingResult(ip: ip, isOnline: true, latencyMs: latencies.first);
+      }
+    } catch (_) {}
     return PingResult(ip: ip, isOnline: false);
   }
 

@@ -27,7 +27,7 @@ set APP_NAME=JA_Remote
 for /f "tokens=2 delims=: " %%a in ('findstr /r "^version:" pubspec.yaml') do (
     for /f "tokens=1 delims=+" %%v in ("%%a") do set APP_VERSION=%%v
 )
-if "%APP_VERSION%"=="" set APP_VERSION=1.2.1
+if "%APP_VERSION%"=="" set APP_VERSION=1.3.0
 
 set ZIP_NAME=%APP_NAME%_v%APP_VERSION%_Windows_x64.zip
 set STAGING_NAME=%APP_NAME%_v%APP_VERSION%_Windows_x64
@@ -39,6 +39,9 @@ if exist "%REL%\config.ini" del /f /q "%REL%\config.ini"
 
 echo [3/5] Copying accessories into Release folder...
 if exist debug.bat copy /y debug.bat "%REL%\" >nul
+if exist install.bat copy /y install.bat "%REL%\" >nul
+if exist uninstall.bat copy /y uninstall.bat "%REL%\" >nul
+if exist uninstall.ps1 copy /y uninstall.ps1 "%REL%\" >nul
 if exist ABOUT.txt copy /y ABOUT.txt "%REL%\" >nul
 if exist README.md copy /y README.md "%REL%\" >nul
 if exist CHANGELOG.md copy /y CHANGELOG.md "%REL%\" >nul

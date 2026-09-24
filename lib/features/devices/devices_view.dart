@@ -1526,15 +1526,153 @@ class _DeviceRow extends StatelessWidget {
                       }
                     },
                   ),
-                  // Details
-                  IconButton(
+                  // Details & Quick Copy Context Menu
+                  PopupMenuButton<String>(
                     iconSize: 18,
-                    tooltip: 'Chi tiết & Quản trị',
+                    tooltip: 'Tùy chọn & Sao chép nhanh',
                     icon: Icon(
                       Icons.more_vert_rounded,
                       color: colors.textSecondary,
                     ),
-                    onPressed: onShowDetail,
+                    color: colors.cardBg,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: colors.cardBorder),
+                    ),
+                    onSelected: (val) async {
+                      switch (val) {
+                        case 'copy_ip':
+                          await Clipboard.setData(
+                            ClipboardData(text: device.ip),
+                          );
+                          if (context.mounted) {
+                            showAppToast(
+                              context,
+                              colors: colors,
+                              message: 'Đã sao chép IP: ${device.ip}',
+                              icon: Icons.copy_rounded,
+                              accentColor: colors.accentCyan,
+                            );
+                          }
+                          break;
+                        case 'copy_host':
+                          await Clipboard.setData(
+                            ClipboardData(text: device.hostname),
+                          );
+                          if (context.mounted) {
+                            showAppToast(
+                              context,
+                              colors: colors,
+                              message:
+                                  'Đã sao chép Hostname: ${device.hostname}',
+                              icon: Icons.copy_rounded,
+                              accentColor: colors.accentCyan,
+                            );
+                          }
+                          break;
+                        case 'copy_mac':
+                          if (device.mac != null && device.mac!.isNotEmpty) {
+                            await Clipboard.setData(
+                              ClipboardData(text: device.mac!),
+                            );
+                            if (context.mounted) {
+                              showAppToast(
+                                context,
+                                colors: colors,
+                                message: 'Đã sao chép MAC: ${device.mac}',
+                                icon: Icons.copy_rounded,
+                                accentColor: colors.accentCyan,
+                              );
+                            }
+                          } else {
+                            if (context.mounted) {
+                              showAppToast(
+                                context,
+                                colors: colors,
+                                message: 'Thiết bị chưa có địa chỉ MAC',
+                                icon: Icons.warning_rounded,
+                                accentColor: colors.accentAmber,
+                              );
+                            }
+                          }
+                          break;
+                        case 'details':
+                          onShowDetail();
+                          break;
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'copy_ip',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.copy_rounded,
+                              size: 14,
+                              color: colors.accentCyan,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Sao chép IP (${device.ip})',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'copy_host',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.dns_rounded,
+                              size: 14,
+                              color: colors.accentCyan,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Sao chép Hostname',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (device.mac != null && device.mac!.isNotEmpty)
+                        PopupMenuItem(
+                          value: 'copy_mac',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.fingerprint_rounded,
+                                size: 14,
+                                color: colors.accentCyan,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Sao chép MAC',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'details',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.edit_note_rounded,
+                              size: 15,
+                              color: colors.textPrimary,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Chi tiết & Chỉnh sửa',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

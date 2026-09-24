@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../widgets/route_shortcuts.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
@@ -17,6 +18,8 @@ import '../features/command_runner/command_runner_view.dart';
 import '../features/file_deploy/file_deploy_view.dart';
 import '../features/logs/logs_view.dart';
 import '../core/network/mac_oui_resolver.dart';
+import '../services/ota_update_service.dart';
+import '../widgets/glass_update_dialog.dart';
 
 part 'dashboard_shell_settings.dart';
 
@@ -42,6 +45,41 @@ class _DashboardShellState extends State<DashboardShell> {
   int _currentIndex = 0;
   final Set<int> _activatedTabs = {0};
   final bool _isServiceRunning = true;
+  Timer? _otaTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkOtaOnStartup();
+    });
+  }
+
+  void _checkOtaOnStartup() {
+    _otaTimer = Timer(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      final ota = OtaUpdateService();
+      if (ota.shouldCheckForUpdates(
+        interval: ota.config.checkInterval,
+        lastCheckTime: ota.config.lastCheckTime,
+      )) {
+        final result = await ota.checkForUpdates();
+        if (result.hasUpdate && result.packageInfo != null && mounted) {
+          showGlassUpdateDialog(
+            context: context,
+            packageInfo: result.packageInfo!,
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _otaTimer?.cancel();
+    _otaTimer = null;
+    super.dispose();
+  }
 
   void _selectTab(int index) {
     if (index < 0 || index >= _tabIcons.length) return;
@@ -410,7 +448,58 @@ class _DashboardShellState extends State<DashboardShell> {
 
           const SizedBox(width: 6),
 
-          // 4. Glassmorphism Settings Button with Hover Zoom & Full Text
+          // 4. OTA Update Badge (appears when an update is available)
+          ListenableBuilder(
+            listenable: OtaUpdateService(),
+            builder: (context, _) {
+              final ota = OtaUpdateService();
+              final hasUpdate = ota.lastCheckResult?.hasUpdate == true;
+              if (!hasUpdate) return const SizedBox.shrink();
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TopBarExpandingButton(
+                    icon: Icon(
+                      Icons.system_update_alt_rounded,
+                      color: colors.accentEmerald,
+                      size: 14,
+                    ),
+                    collapsedLabel: null,
+                    expandedLabel:
+                        ota
+                            .lastCheckResult
+                            ?.packageInfo
+                            ?.version
+                            .displayVersion ??
+                        'Update',
+                    textColor: colors.accentEmerald,
+                    isCompact: isCompact,
+                    tooltip: language.t('ota_update_available', {
+                      'version':
+                          ota
+                              .lastCheckResult
+                              ?.packageInfo
+                              ?.version
+                              .displayVersion ??
+                          '',
+                    }),
+                    colors: colors,
+                    onTap: () {
+                      if (ota.lastCheckResult?.packageInfo != null) {
+                        showGlassUpdateDialog(
+                          context: context,
+                          packageInfo: ota.lastCheckResult!.packageInfo!,
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                ],
+              );
+            },
+          ),
+
+          // 5. Glassmorphism Settings Button with Hover Zoom & Full Text
           TopBarExpandingButton(
             icon: Icon(
               Icons.settings_rounded,
@@ -461,7 +550,7 @@ class _DashboardShellState extends State<DashboardShell> {
               title: language.t('settings_dialog_title'),
               icon: Icons.tune_rounded,
               isDark: theme.isDark,
-              width: 660,
+              width: 700,
               height: 590,
               contentPadding: EdgeInsets.zero,
               blurSigma: localDialogBlur,
@@ -555,22 +644,27 @@ class _DashboardShellState extends State<DashboardShell> {
                             },
                           )
                         : (activeTab == 1
-                              ? _SettingsMacOuiTab(
+                              ? _SettingsOtaUpdateTab(
                                   colors: colors,
                                   language: language,
                                 )
                               : (activeTab == 2
-                                    ? _SettingsUserGuideTab(
+                                    ? _SettingsMacOuiTab(
                                         colors: colors,
                                         language: language,
                                       )
-                                    : _SettingsAboutTab(
-                                        colors: colors,
-                                        theme: theme,
-                                        language: language,
-                                        appVersion: widget.appVersion,
-                                        isDebug: widget.isDebug,
-                                      ))),
+                                    : (activeTab == 3
+                                          ? _SettingsUserGuideTab(
+                                              colors: colors,
+                                              language: language,
+                                            )
+                                          : _SettingsAboutTab(
+                                              colors: colors,
+                                              theme: theme,
+                                              language: language,
+                                              appVersion: widget.appVersion,
+                                              isDebug: widget.isDebug,
+                                            )))),
                   ),
                 ],
               ),
