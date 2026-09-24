@@ -69,7 +69,7 @@ if exist "%PACK%" rmdir /s /q "%PACK%"
 powershell -NoProfile -Command "Get-ChildItem -Path '%DIST%' -Filter '*.zip' | Where-Object { $_.Name -ne '%ZIP_NAME%' } | Remove-Item -Force"
 
 :: Metadata
-powershell -NoProfile -Command "$hash = (Get-FileHash -Path '%DIST%\%ZIP_NAME%' -Algorithm SHA256).Hash; Set-Content -Path '%DIST%\SHA256SUMS.txt' -Value \"$hash *%ZIP_NAME%\""
+powershell -NoProfile -Command "$hash = (Get-FileHash -Path '%DIST%\%ZIP_NAME%' -Algorithm SHA256).Hash.ToLower(); Set-Content -Path '%DIST%\SHA256SUMS.txt' -Value \"$hash *%ZIP_NAME%\"; $date = (Get-Date -Format 'yyyy-MM-dd'); $json = [ordered]@{ version = '%APP_VERSION%'; fileName = '%ZIP_NAME%'; sha256 = $hash; releaseDate = $date; releaseNotes = 'Release v%APP_VERSION%' } | ConvertTo-Json -Depth 4; Set-Content -Path '%DIST%\version.json' -Value $json -Encoding UTF8"
 if exist RELEASE_NOTES.md copy /y RELEASE_NOTES.md "%DIST%\" >nul
 
 echo.
