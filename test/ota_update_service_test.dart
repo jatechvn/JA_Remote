@@ -345,6 +345,76 @@ void main() {
       }
     });
 
+    test(
+      'handles server candidate without version.json when already up to date',
+      () async {
+        final tempServer = await Directory.systemTemp.createTemp(
+          'mock_ota_same_ver_',
+        );
+        try {
+          await File(
+            '${tempServer.path}/JA_Remote_v1.2.1_Windows_x64.zip',
+          ).writeAsString('MOCK_CONTENT');
+          service.setCustomServerDirForTesting(tempServer);
+          service.setCustomConfigFileForTesting(
+            File('${tempServer.path}/update_config.json'),
+          );
+
+          final result = await service.checkForUpdates(
+            overrideServerPath: tempServer.path,
+            overrideCurrentVersion: '1.2.1',
+          );
+
+          expect(result.hasUpdate, isFalse);
+          expect(result.errorMessage, isNull);
+          expect(result.packageInfo, isNotNull);
+          expect(result.packageInfo!.version.toString(), equals('1.2.1'));
+        } finally {
+          service.setCustomServerDirForTesting(null);
+          service.setCustomConfigFileForTesting(null);
+          await tempServer.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'detects update from zip fallback via SHA256SUMS.txt when version.json is missing',
+      () async {
+        final tempServer = await Directory.systemTemp.createTemp(
+          'mock_ota_sums_',
+        );
+        try {
+          final zipName = 'JA_Remote_v1.3.0_Windows_x64.zip';
+          await File(
+            '${tempServer.path}/$zipName',
+          ).writeAsString('NEW_VERSION');
+          final fakeHash = 'b' * 64;
+          await File(
+            '${tempServer.path}/SHA256SUMS.txt',
+          ).writeAsString('$fakeHash *$zipName\n');
+          service.setCustomServerDirForTesting(tempServer);
+          service.setCustomConfigFileForTesting(
+            File('${tempServer.path}/update_config.json'),
+          );
+
+          final result = await service.checkForUpdates(
+            overrideServerPath: tempServer.path,
+            overrideCurrentVersion: '1.2.1',
+          );
+
+          expect(result.hasUpdate, isTrue);
+          expect(result.errorMessage, isNull);
+          expect(result.packageInfo, isNotNull);
+          expect(result.packageInfo!.version.toString(), equals('1.3.0'));
+          expect(result.packageInfo!.sha256, equals(fakeHash));
+        } finally {
+          service.setCustomServerDirForTesting(null);
+          service.setCustomConfigFileForTesting(null);
+          await tempServer.delete(recursive: true);
+        }
+      },
+    );
+
     test('requires files and a directory for the extracted payload', () async {
       final payload = await Directory.systemTemp.createTemp('ota_payload_');
       try {

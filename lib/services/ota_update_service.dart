@@ -627,12 +627,90 @@ class OtaUpdateService extends ChangeNotifier {
         return res;
       }
 
+      candidates.sort((a, b) => b.version.compareTo(a.version));
+      final latestPkg = candidates.first;
+      final hasUpdate = latestPkg.version > currentSemVer;
+
+      if (!hasUpdate) {
+        final res = UpdateCheckResult(
+          hasUpdate: false,
+          packageInfo: latestPkg,
+          currentVersion: currentVerStr,
+        );
+        _lastCheckResult = res;
+        return res;
+      }
+
+      // Có phiên bản mới hơn trên máy chủ -> tìm hoặc tính mã SHA-256
+      String? checksum;
+      final shaSumsFile = File(
+        '${dir.path}${Platform.pathSeparator}SHA256SUMS.txt',
+      );
+      if (await shaSumsFile.exists()) {
+        try {
+          final lines = await shaSumsFile.readAsLines();
+          for (final line in lines) {
+            final trimmed = line.trim();
+            if (trimmed.toLowerCase().contains(
+              latestPkg.fileName.toLowerCase(),
+            )) {
+              final match = RegExp(r'([A-Fa-f0-9]{64})').firstMatch(trimmed);
+              if (match != null) {
+                checksum = match.group(1)!.toLowerCase();
+                break;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (checksum == null) {
+        final singleShaFile = File('${latestPkg.fullPath}.sha256');
+        if (await singleShaFile.exists()) {
+          try {
+            final content = await singleShaFile.readAsString();
+            final match = RegExp(r'([A-Fa-f0-9]{64})').firstMatch(content);
+            if (match != null) {
+              checksum = match.group(1)!.toLowerCase();
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (checksum == null) {
+        try {
+          checksum = await _sha256Of(File(latestPkg.fullPath));
+        } catch (_) {}
+      }
+
+      if (checksum == null || !isValidSha256(checksum)) {
+        final res = UpdateCheckResult(
+          hasUpdate: false,
+          currentVersion: currentVerStr,
+          isConnectionSuccess: false,
+          errorMessage:
+              'Unsigned update packages are blocked. Add version.json or SHA256SUMS.txt with a SHA-256 checksum.',
+        );
+        _lastCheckResult = res;
+        return res;
+      }
+
+      final verifiedPkg = UpdatePackageInfo(
+        version: latestPkg.version,
+        fileName: latestPkg.fileName,
+        fullPath: latestPkg.fullPath,
+        fileSize: latestPkg.fileSize,
+        sha256: checksum,
+      );
+
+      await saveExternalConfigFile(
+        _config.copyWith(cachedUpdateVersion: verifiedPkg.version.toString()),
+      );
+
       final res = UpdateCheckResult(
-        hasUpdate: false,
+        hasUpdate: true,
+        packageInfo: verifiedPkg,
         currentVersion: currentVerStr,
-        isConnectionSuccess: false,
-        errorMessage:
-            'Unsigned update packages are blocked. Add version.json with a SHA-256 checksum.',
       );
       _lastCheckResult = res;
       return res;
