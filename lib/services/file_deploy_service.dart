@@ -774,14 +774,18 @@ class FileDeployService extends ChangeNotifier {
     final sourceRoot = config.isDirectory
         ? config.sourcePath
         : p.dirname(config.sourcePath);
-    final items = _sourceFilesList
-        .map(
-          (file) => {
-            'source': file.absolute.path,
-            'relative': p.relative(file.path, from: sourceRoot),
-          },
-        )
-        .toList();
+    final items = <Map<String, String>>[];
+    for (final file in _sourceFilesList) {
+      final rel = p.relative(file.path, from: sourceRoot);
+      if (p.split(rel).contains('..') ||
+          rel.contains(':') ||
+          p.isAbsolute(rel)) {
+        throw ArgumentError('Invalid relative path in deploy source: $rel');
+      }
+      final sourceHandle = await file.open();
+      await sourceHandle.close();
+      items.add({'source': file.absolute.path, 'relative': rel});
+    }
     String encoded(String value) => base64Encode(utf8.encode(value));
     final values = {
       'items': items,
@@ -802,6 +806,21 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $cfg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload)) | ConvertFrom-Json
 $unlockText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($unlock))
+
+function Is-SharingViolation($err) {
+  if (!$err) { return $false }
+  $ex = $err.Exception
+  while ($ex) {
+    if ($ex -is [System.IO.IOException]) {
+      $hr = $ex.HResult
+      if ($hr -eq -2147024864 -or $hr -eq -2147024863) { return $true }
+      if ($ex.NativeErrorCode -eq 32 -or $ex.NativeErrorCode -eq 33) { return $true }
+    }
+    $ex = $ex.InnerException
+  }
+  return $false
+}
+
 $session = $null
 $cred = $null
 if ($cfg.user) {
@@ -828,62 +847,185 @@ try {
     $mapped = $true
     $smbDest = Join-Path ($driveName + ':\') $sub
   }
-  foreach ($item in $cfg.items) {
-    $dest = Join-Path $cfg.dest $item.relative
-    $backup = $dest + '.jad_old_' + [Guid]::NewGuid().ToString('N')
-    $prepare = {
-      param($dest, $backup, $overwrite, $create, $kill, $text)
-      $parent = Split-Path -LiteralPath $dest
-      if (!(Test-Path -LiteralPath $parent -PathType Container)) {
-        if (!$create) { throw "Destination directory missing: $parent" }
-        [IO.Directory]::CreateDirectory($parent) | Out-Null
+
+  # Validate all target paths on their owning machine before killing any holder.
+  $validateManifest = {
+    param($base, $items, $overwrite, $create)
+    if ($base -notmatch '^(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+)') { throw 'Destination must be absolute' }
+    $rootPath = [IO.Path]::GetFullPath($base).TrimEnd('\') + '\'
+    $seen = @{}
+    foreach ($item in $items) {
+      $relative = [string]$item.relative
+      if ([IO.Path]::IsPathRooted($relative) -or $relative.Contains(':') -or ($relative -split '[\\/]' -contains '..')) { throw 'Invalid relative destination' }
+      $path = [IO.Path]::GetFullPath((Join-Path $base $relative))
+      if (!$path.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) { throw 'Destination escapes selected directory' }
+      if ($seen.ContainsKey($path)) { throw "Duplicate destination: $path" }
+      $seen[$path] = $true
+      $ancestor = $path
+      while ($ancestor) {
+        if (Test-Path -LiteralPath $ancestor) {
+          $entry = Get-Item -LiteralPath $ancestor -Force -ErrorAction Stop
+          if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Destination traverses a reparse point: $ancestor" }
+        }
+        $parent = [IO.Path]::GetDirectoryName($ancestor)
+        if ($parent -eq $ancestor) { break }
+        $ancestor = $parent
       }
-      if (Test-Path -LiteralPath $dest) {
-        if (!$overwrite) { throw "Destination already exists: $dest" }
-        if (!(Test-Path -LiteralPath $dest -PathType Leaf)) { throw 'Destination is not a file' }
-        try { [IO.File]::Move($dest, $backup) } catch {
-          if (!$kill) { throw }
-          . ([ScriptBlock]::Create($text))
-          Unlock-DeployFile $dest
-          [IO.File]::Move($dest, $backup)
+      if (Test-Path -LiteralPath $path) {
+        if (!$overwrite) { throw "Destination already exists: $path" }
+        if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "Destination is not a file: $path" }
+      }
+      if (!$create -and !(Test-Path -LiteralPath ([IO.Path]::GetDirectoryName($path)) -PathType Container)) { throw "Destination directory missing: $path" }
+    }
+  }
+  if ($session) {
+    Invoke-Command -Session $session -ScriptBlock $validateManifest -ArgumentList $cfg.dest, $cfg.items, $cfg.overwrite, $cfg.create
+  } else {
+    & $validateManifest (Join-Path $root $sub) $cfg.items $cfg.overwrite $cfg.create
+  }
+
+  # Preflight manifest unlock for WinRM when auto-kill is enabled
+  if ($session -and $cfg.kill) {
+    $manifestDestFiles = @($cfg.items | ForEach-Object { Join-Path $cfg.dest $_.relative })
+    Invoke-Command -Session $session -ScriptBlock {
+      param($files, $text)
+      . ([ScriptBlock]::Create($text))
+      Unlock-DeployManifest $files
+    } -ArgumentList $manifestDestFiles, $unlockText
+  }
+
+  $prepare = {
+    param($dest, $backup, $overwrite, $create, $kill, $text)
+    $parent = Split-Path -LiteralPath $dest
+    if (!(Test-Path -LiteralPath $parent -PathType Container)) {
+      if (!$create) { throw "Destination directory missing: $parent" }
+      [IO.Directory]::CreateDirectory($parent) | Out-Null
+    }
+    if (Test-Path -LiteralPath $dest) {
+      if (!$overwrite) { throw "Destination already exists: $dest" }
+      if (!(Test-Path -LiteralPath $dest -PathType Leaf)) { throw 'Destination is not a file' }
+      try {
+        [IO.File]::Move($dest, $backup)
+      } catch {
+        if (!$kill) { throw }
+        . ([ScriptBlock]::Create($text))
+        Unlock-DeployFile $dest
+        [IO.File]::Move($dest, $backup)
+      }
+    }
+  }
+
+  $restore = {
+    param($dest, $backup)
+    $rollbackError = $null
+    if (Test-Path -LiteralPath $backup -PathType Leaf) {
+      try {
+        if (Test-Path -LiteralPath $dest -PathType Leaf) { [IO.File]::Delete($dest) }
+        [IO.File]::Move($backup, $dest)
+      } catch {
+        $rollbackError = "Rollback failed; original retained at ${backup}: $_"
+      }
+    } else {
+      try {
+        if (Test-Path -LiteralPath $dest -PathType Leaf) { [IO.File]::Delete($dest) }
+      } catch {
+        $rollbackError = "Partial cleanup failed at ${dest}: $_"
+      }
+    }
+    if ($rollbackError) { throw $rollbackError }
+  }
+
+  foreach ($item in $cfg.items) {
+    if ($session) {
+      $dest = Join-Path $cfg.dest $item.relative
+      $backup = $dest + '.jad_old_' + [Guid]::NewGuid().ToString('N')
+      Invoke-Command -Session $session -ScriptBlock $prepare -ArgumentList $dest, $backup, $cfg.overwrite, $cfg.create, $cfg.kill, $unlockText
+
+      $copied = $false
+      $copyError = $null
+      for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+          Copy-Item -LiteralPath $item.source -Destination $dest -ToSession $session -Force -ErrorAction Stop
+          $copied = $true
+          break
+        } catch {
+          $copyError = $_
+          if ($attempt -lt 3 -and (Is-SharingViolation $copyError)) {
+            Start-Sleep -Milliseconds (300 * $attempt)
+          } else {
+            break
+          }
         }
       }
-    }
-    $restore = {
-      param($dest, $backup)
-      if (Test-Path -LiteralPath $backup -PathType Leaf) {
+
+      if (!$copied) {
+        $rbErr = $null
         try {
-          if (Test-Path -LiteralPath $dest -PathType Leaf) { [IO.File]::Delete($dest) }
-          [IO.File]::Move($backup, $dest)
-        } catch { throw "Rollback failed; original retained at ${backup}: $_" }
+          Invoke-Command -Session $session -ScriptBlock $restore -ArgumentList $dest, $backup
+        } catch {
+          $rbErr = $_
+        }
+        if ($rbErr) {
+          throw "Copy failed: $copyError; $rbErr"
+        } else {
+          throw $copyError
+        }
       }
-    }
-    if ($session) {
-      Invoke-Command -Session $session -ScriptBlock $prepare -ArgumentList $dest, $backup, $cfg.overwrite, $cfg.create, $cfg.kill, $unlockText
-      try {
-        Copy-Item -LiteralPath $item.source -Destination $dest -ToSession $session -Force -ErrorAction Stop
-      } catch {
-        $copyError = $_
-        Invoke-Command -Session $session -ScriptBlock $restore -ArgumentList $dest, $backup
-        throw $copyError
-      }
+
       Invoke-Command -Session $session -ScriptBlock {
         param($backup)
-        if (Test-Path -LiteralPath $backup -PathType Leaf) { Remove-Item -LiteralPath $backup -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $backup -PathType Leaf) {
+          try {
+            Remove-Item -LiteralPath $backup -Force -ErrorAction Stop
+          } catch {
+            Write-Output "WARNING: Backup retained at ${backup} (in use or locked)"
+          }
+        }
       } -ArgumentList $backup
+
     } else {
-      # Use an actual UNC path for .NET file operations (PSDrive names are PowerShell-only).
       $dest = Join-Path (Join-Path $root $sub) $item.relative
       $backup = $dest + '.jad_old_' + [Guid]::NewGuid().ToString('N')
       & $prepare $dest $backup $cfg.overwrite $cfg.create $false $unlockText
-      try {
-        Copy-Item -LiteralPath $item.source -Destination $dest -Force -ErrorAction Stop
-      } catch {
-        $copyError = $_
-        & $restore $dest $backup
-        throw $copyError
+
+      $copied = $false
+      $copyError = $null
+      for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+          Copy-Item -LiteralPath $item.source -Destination $dest -Force -ErrorAction Stop
+          $copied = $true
+          break
+        } catch {
+          $copyError = $_
+          if ($attempt -lt 3 -and (Is-SharingViolation $copyError)) {
+            Start-Sleep -Milliseconds (300 * $attempt)
+          } else {
+            break
+          }
+        }
       }
-      if (Test-Path -LiteralPath $backup -PathType Leaf) { Remove-Item -LiteralPath $backup -ErrorAction SilentlyContinue }
+
+      if (!$copied) {
+        $rbErr = $null
+        try {
+          & $restore $dest $backup
+        } catch {
+          $rbErr = $_
+        }
+        if ($rbErr) {
+          throw "Copy failed: $copyError; $rbErr"
+        } else {
+          throw $copyError
+        }
+      }
+
+      if (Test-Path -LiteralPath $backup -PathType Leaf) {
+        try {
+          Remove-Item -LiteralPath $backup -Force -ErrorAction Stop
+        } catch {
+          Write-Output "WARNING: Backup retained at ${backup} (in use or locked)"
+        }
+      }
     }
   }
   Write-Output 'DEPLOY_SUCCESS'
@@ -898,6 +1040,7 @@ try {
     );
     for (final line in const LineSplitter().convert(res.stdout)) {
       if (line.startsWith('AUTO_KILL ') ||
+          line.startsWith('WARNING: ') ||
           line.startsWith('WinRM unavailable')) {
         _log('[${device.ip}] $line');
       }
@@ -924,7 +1067,6 @@ try {
           destDir.path,
         );
       }
-      await destDir.create(recursive: true);
     }
 
     int bytesDone = 0;
@@ -932,9 +1074,78 @@ try {
         ? config.sourcePath
         : p.dirname(config.sourcePath);
 
+    // Validate the entire manifest before any process may be terminated.
+    final destinations = <String>{};
+    for (final file in _sourceFilesList) {
+      final rel = p.relative(file.path, from: sourceRoot);
+      if (p.split(rel).contains('..') ||
+          rel.contains(':') ||
+          p.isAbsolute(rel)) {
+        throw ArgumentError('Invalid relative path in deploy source: $rel');
+      }
+      final destination = p.normalize(p.absolute(p.join(destDir.path, rel)));
+      if (p.equals(p.normalize(file.absolute.path), destination)) {
+        throw ArgumentError('Source and destination must be different');
+      }
+      if (!destinations.add(
+        Platform.isWindows ? destination.toLowerCase() : destination,
+      )) {
+        throw ArgumentError('Duplicate destination: $destination');
+      }
+      var ancestor = destination;
+      while (true) {
+        if (await FileSystemEntity.type(ancestor, followLinks: false) ==
+            FileSystemEntityType.link) {
+          throw FileSystemException('Destination traverses a link', ancestor);
+        }
+        final parent = p.dirname(ancestor);
+        if (parent == ancestor) break;
+        ancestor = parent;
+      }
+      final type = await FileSystemEntity.type(destination, followLinks: false);
+      if (type != FileSystemEntityType.notFound &&
+          type != FileSystemEntityType.file) {
+        throw FileSystemException('Destination is not a file', destination);
+      }
+      if (!config.overwrite && type == FileSystemEntityType.file) {
+        throw FileSystemException('Destination already exists', destination);
+      }
+      if (!config.createDirIfMissing &&
+          !await Directory(p.dirname(destination)).exists()) {
+        throw FileSystemException(
+          'Destination directory missing',
+          p.dirname(destination),
+        );
+      }
+      final handle = await file.open();
+      await handle.close();
+    }
+    if (_abortRequested) throw Exception('Deployment cancelled');
+    if (!await destDir.exists()) await destDir.create(recursive: true);
+
+    // Preflight manifest unlock for local Windows
+    if (config.overwrite && config.autoKillIfInUse && Platform.isWindows) {
+      final existingDestFiles = <String>[];
+      for (final file in _sourceFilesList) {
+        final rel = p.relative(file.path, from: sourceRoot);
+        final destFile = File(p.join(destDir.path, rel));
+        if (await destFile.exists()) {
+          existingDestFiles.add(destFile.path);
+        }
+      }
+      if (existingDestFiles.isNotEmpty) {
+        await _killLocalLockedProcessesForManifest(existingDestFiles, deviceId);
+      }
+    }
+
     for (final file in _sourceFilesList) {
       if (_abortRequested) throw Exception('Bị hủy bởi người dùng');
       final rel = p.relative(file.path, from: sourceRoot);
+      if (p.split(rel).contains('..') ||
+          rel.contains(':') ||
+          p.isAbsolute(rel)) {
+        throw ArgumentError('Invalid relative path in deploy source: $rel');
+      }
       final destFile = File(p.join(destDir.path, rel));
       if (!await destFile.parent.exists()) {
         if (!config.createDirIfMissing) {
@@ -972,26 +1183,63 @@ try {
         }
         backedUp = true;
       }
-      try {
-        await _copyFile(file, destFile.path);
-      } catch (error) {
+
+      var copied = false;
+      Object? lastCopyError;
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        if (_abortRequested) {
+          lastCopyError = StateError('Deployment cancelled');
+          break;
+        }
+        try {
+          await _copyFile(file, destFile.path);
+          copied = true;
+          break;
+        } catch (error) {
+          lastCopyError = error;
+          final isSharingViolation =
+              error is FileSystemException &&
+              (error.osError?.errorCode == 32 ||
+                  error.osError?.errorCode == 33);
+          if (attempt < 3 && isSharingViolation) {
+            await Future.delayed(Duration(milliseconds: 300 * attempt));
+          } else {
+            break;
+          }
+        }
+      }
+
+      if (!copied) {
         if (backedUp) {
           try {
             if (await destFile.exists()) await destFile.delete();
             await backup.rename(destFile.path);
           } catch (rollbackError) {
             throw FileSystemException(
-              'Copy failed: $error; rollback failed: $rollbackError; original retained',
+              'Copy failed: $lastCopyError; rollback failed: $rollbackError; original retained',
               backup.path,
             );
           }
+        } else {
+          try {
+            if (await destFile.exists()) await destFile.delete();
+          } catch (cleanupError) {
+            throw FileSystemException(
+              'Copy failed: $lastCopyError; partial cleanup failed: $cleanupError',
+              destFile.path,
+            );
+          }
         }
-        rethrow;
+        if (lastCopyError is Exception) throw lastCopyError;
+        throw Exception('Copy failed: $lastCopyError');
       }
+
       if (backedUp) {
         try {
           await backup.delete();
-        } catch (_) {}
+        } catch (e) {
+          _log('[$deviceId] WARNING: Backup retained at ${backup.path}: $e');
+        }
       }
       bytesDone += await file.length();
       _updateDeviceProgress(
@@ -1000,6 +1248,25 @@ try {
         bytesTransferred: bytesDone,
         currentFileName: p.basename(file.path),
       );
+    }
+  }
+
+  Future<void> _killLocalLockedProcessesForManifest(
+    List<String> targetFiles,
+    String deviceId,
+  ) async {
+    final psList = targetFiles
+        .map((f) => "'${f.replaceAll("'", "''")}'")
+        .join(', ');
+    final result = await _runPowerShell(
+      "\$ErrorActionPreference = 'Stop'\n$fileUnlockScript\nUnlock-DeployManifest @($psList)",
+      timeoutSeconds: 30,
+    );
+    for (final line in const LineSplitter().convert(result.stdout)) {
+      if (line.startsWith('AUTO_KILL ')) _log('[$deviceId] $line');
+    }
+    if (!result.isSuccess) {
+      throw Exception('Unlock manifest failed: ${result.stderr}');
     }
   }
 

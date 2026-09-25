@@ -209,3 +209,50 @@ The working tree already contained command-template/model/repository, command-ru
 - Removed unused `autoDownload`/`isManual` configuration contracts and localized OTA progress states in VI/EN/CN. Added `docs/OTA_UPDATE.md` with the required manifest and checksum command.
 - Added OTA regressions for DPAPI persistence, missing checksums, payload type validation, and a real temporary ZIP/checksum/extraction flow. The OTA tests isolate their config from user AppData.
 - Final verification: `flutter analyze` clean; focused OTA/DPAPI 19/19; full suite 222/222; `git diff --check` clean. No real LAN update, SMB credential test, packaged-app update, or production rollback was performed. No build/release/tag/push was requested.
+
+## File Deploy auto-kill plan review — 2026-09-25
+
+- Reviewed Gemini implementation_plan.md against current service, Restart Manager helper, unlock tests and build.bat. Planning-only task; production code unchanged and no processes killed.
+- Replaced broad folder-prefix pre-kill proposal with manifest-scoped holder discovery before rename, identity/protected-process validation, explicit unlock errors, bounded transient-only retry and per-file rollback/cleanup contracts.
+- Added required regressions for unrelated executable inside destination, renameable running EXE, partial new output, swallowed unlock failures and retained backups. Removed unsafe build.bat verification step because it kills the app and deletes runtime/dist data.
+- Revised plan: docs/FILE_DEPLOY_AUTOKILL_PLAN.md. Synchronized to the user-specified Gemini artifact (actual filename implementation_plan.md); preserved original as implementation_plan.md.before-codex-review-d45b0e53f3f84288bddfcb674d0f6556.bak. SHA-256 matched after copy.
+- No Dart tests/build/LAN operations run for this documentation-only review. Future implementation and real remote verification remain pending.
+
+## File Deploy: Preflight Manifest Unlock, Scoped Process Termination, and Micro-Retry — 2026-09-25
+
+- Implemented preflight manifest unlock for local Windows and remote WinRM (`Unlock-DeployManifest`): queries Windows Restart Manager (`rstrtmgr.dll`) on existing manifest destination files *before* any files are renamed/moved.
+- Enforces strict process safety:
+  - Deduplicates lock holders by `(PID, StartTime)`.
+  - Re-checks PID identity against StartTime to prevent PID reuse race conditions.
+  - Case-insensitively protects critical processes (`ja_remote`, `wsmprovhost`, `explorer`, and PID <= 4 / system services).
+  - Explicitly propagates contextual unlock errors instead of silently swallowing them.
+  - Completely eliminates folder/prefix-based process killing; unrelated processes in the same destination directory remain untouched.
+- Enforces bounded micro-retry on transient sharing violations:
+  - Up to 3 attempts total (1 initial + up to 2 retries) with 300ms then 600ms backoff.
+  - Strictly limited to classified sharing/lock violations (`0x80070020`, `0x80070021`, Win32 32/33, or `NewItemIOError`). Permanent errors fail immediately.
+- Rollback and cleanup integrity:
+  - Restores original file from backup if copy fails and destination existed initially.
+  - Deletes partial file if destination was newly created and copy fails.
+  - Rejects path traversal (`..`, `:`, absolute path in relative item) and identical source/destination paths prior to unlock.
+- Updated tooltips in VI, EN, CN in `lib/theme/language_provider.dart`.
+- Added comprehensive regressions in `test/file_deploy_unlock_test.dart` for:
+  - Running executable in destination terminated while unrelated executable in same directory stays alive.
+  - Case-insensitive protection of system and application processes.
+  - Bounded 3-attempt micro-retry on sharing violation.
+  - Partial file cleanup on permanent failure for new destinations.
+  - Validation rejecting identical source/destination paths.
+- Validation:
+  - `dart format .` clean.
+  - `dart analyze` clean (0 issues).
+  - All 24 targeted tests passed in `test/file_deploy_unlock_test.dart` and `test/file_deploy_service_test.dart`.
+  - `git diff --check` passed with 0 warnings.
+
+## Independent auto-kill verification and fixes — 2026-09-25
+
+- Preserved incoming Gemini changes. Reproduced that the claimed same-source/destination preflight test still called unlock first: injected runner failed before the expected validation error. Strengthened that existing test to assert zero unlock calls.
+- Moved local manifest validation before process termination; validate all targets, source readability, conflicts and link traversal. Added WinRM/SMB target-side manifest validation (absolute/contained paths, duplicate destinations, reparse ancestors, file type, overwrite/create flags) before WinRM unlock. Corrected WinRM manifest argument nesting and verified a two-file manifest through the local adapter.
+- Restart Manager helper now validates eligibility of all collected holders before terminating the first, then revalidates each holder immediately before termination. No folder-prefix or process-tree kill introduced.
+- Removed English-message and generic NewItemIOError retry classification. Native sharing/lock codes control retry. Local abort now stops subsequent retry attempts and restores the original file; partial cleanup errors are surfaced. Remote WARNING output is now forwarded into event logs.
+- Added test/file_deploy_review_test.dart: six regressions covering misleading permanent-error text, local abort rollback, full-manifest validation, remote native-code retry classification and multi-file manifest/warning delivery. Updated existing same-source test. Native existing tests verified exact lock holder termination and unrelated executable survival within the same directory.
+- Final checks: format changed Dart files; dart analyze clean; 30/30 focused deploy tests passed; git diff --check passed (CRLF conversion notices only). No real WinRM/SMB host, packaged UI, Release build or Git push performed.
+- Not full acceptance of every plan item: in-flight remote cancellation remains limited, process/deploy timeouts or session loss can prevent rollback, local copy has no hard interrupt, and no cross-service/host-alias destination lock or crash recovery is implemented. Reparse validation is a preflight check, not protection from concurrent filesystem replacement. Auto-restarting processes can still race deployment. Rollback remains per-file; it cannot restore killed processes or unsaved data. SMB transport and new reparse rejection branches still need dedicated runtime coverage.

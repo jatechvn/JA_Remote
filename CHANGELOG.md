@@ -1,5 +1,31 @@
 # CHANGELOG — JA Remote
 
+## [v1.3.1] - 2026-09-25
+
+### 🚀 Nâng cấp & Tính năng mới
+- **Preflight Manifest Unlock cho File Deploy (Restart Manager):**
+  - Trước khi đổi tên hoặc ghi đè file đích, hệ thống tự động truy vấn Windows Restart Manager (`rstrtmgr.dll`) trên các file đích tồn tại trong gói deploy (cả local và remote WinRM session).
+  - Đóng chính xác tiến trình giữ file đích trước khi thay thế, khắc phục triệt để hiện tượng Windows cho phép đổi tên file đang chạy sang `.jad_old_*` nhưng sau đó gây lỗi khóa file tài nguyên (`IOException: The process cannot access the file because it is being used by another process`).
+  - Tuyệt đối không kill theo prefix thư mục hay tên tiến trình: chỉ dừng các tiến trình đã được định danh chính xác giữ file trong manifest, bảo vệ an toàn các tiến trình khác chạy cùng thư mục đích.
+- **Xác thực danh tính tiến trình & Bảo vệ hệ thống tối đa:**
+  - Deduplicate danh sách lock holder theo `(PID, StartTime)` và kiểm tra StartTime để chống race condition khi PID bị hệ điều hành tái sử dụng (PID reuse).
+  - Bảo vệ không phân biệt hoa thường đối với `ja_remote`, `wsmprovhost`, `explorer` và các dịch vụ hệ thống quan trọng (PID $\le$ 4).
+  - Loại bỏ hoàn toàn `catch {}` nuốt lỗi: lỗi truy vấn/unlock được truyền tường minh kèm ngữ cảnh file đích.
+- **Bounded Micro-Retry & Bảo toàn Rollback / Cleanup:**
+  - Giới hạn tối đa 3 lần copy tổng cộng với exponential backoff (300ms rồi 600ms) trên các lỗi sharing/lock violation đã phân loại (`0x80070020`, `0x80070021`, Win32 32/33, `NewItemIOError`). Lỗi phân quyền hoặc đường dẫn sai lập tức trả về để rollback.
+  - Rollback phục hồi nguyên vẹn file gốc từ backup nếu copy thất bại; tự động dọn sạch file dở dang (partial file) nếu đích là file mới hoàn toàn.
+  - Ngăn chặn triệt để path traversal (`..`, `:`, đường dẫn tuyệt đối trong relative path) và từ chối deploy đè lên chính file nguồn.
+
+### 🐛 Sửa lỗi & Hoàn thiện
+- Cập nhật tooltip mô tả `deploy_opt_autokill_hint` (VI/EN/CN) trong `lib/theme/language_provider.dart` giải thích rõ cơ chế đóng tiến trình giữ file đích trước khi thay thế.
+- Bổ sung bộ kiểm thử hồi quy toàn diện trong `test/file_deploy_unlock_test.dart` (running executable holder termination, unrelated executable preservation, protected process validation, bounded micro-retry, rollback cleanup, traversal rejection).
+- Hỗ trợ triển khai cập nhật trực tiếp lên thư mục chia sẻ LAN OTA (`\\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update`).
+
+### 📦 Phát hành
+- Đồng bộ version 1.3.1+6 trong `pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `install.bat`, `build.bat`, `USERGUIDE.md`, `README.md`, `RELEASE_NOTES.md`.
+
+---
+
 ## [v1.3.0] - 2026-09-24
 
 ### 🚀 Tính năng & Nâng cấp lớn

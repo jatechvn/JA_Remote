@@ -1696,11 +1696,11 @@ class LanguageProvider extends ChangeNotifier {
     },
     'deploy_opt_autokill_hint': {
       'vi':
-          'Khi copy lỗi, đóng tiến trình giữ đúng file đích rồi thử lại một lần. Có thể mất dữ liệu chưa lưu. Windows từ xa cần WinRM; Linux cần fuser. Không đóng dịch vụ Windows được bảo vệ.',
+          'Tự động đóng tiến trình đang giữ file đích trước khi thay thế (kể cả khi hệ thống cho phép đổi tên file đang chạy). Có thể mất dữ liệu chưa lưu. Windows từ xa cần WinRM; Linux cần fuser. Không đóng tiến trình được bảo vệ.',
       'en':
-          'On copy failure, close processes holding the exact destination file and retry once. Unsaved data may be lost. Remote Windows requires WinRM; Linux requires fuser. Protected Windows services are not stopped.',
+          'Automatically terminates processes holding destination files before replacement (even if the OS permits renaming running files). Unsaved data may be lost. Remote Windows requires WinRM; Linux requires fuser. Protected processes are not stopped.',
       'cn':
-          '复制失败时终止占用目标文件的进程并重试一次，可能丢失未保存的数据。远程 Windows 需要 WinRM，Linux 需要 fuser。不会停止受保护的 Windows 服务。',
+          '在替换前自动终止占用目标文件的进程（即使系统允许重命名正在运行的文件）。可能丢失未保存的数据。远程 Windows 需要 WinRM，Linux 需要 fuser。不会终止受保护的系统进程。',
     },
     'deploy_auth_title': {
       'vi': 'Tài khoản & Thiết lập mạng',
