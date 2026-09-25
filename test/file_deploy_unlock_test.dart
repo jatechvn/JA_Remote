@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ja_remote/core/process/file_unlock_script.dart';
 import 'package:ja_remote/core/process/process_runner.dart';
 import 'package:ja_remote/services/file_deploy_service.dart';
 import 'package:ja_remote/data/models/managed_device.dart';
@@ -323,5 +324,275 @@ function Copy-Item { param($LiteralPath, $Destination, $ToSession, [switch]$Forc
     },
     skip: !Platform.isWindows,
     timeout: const Timeout(Duration(seconds: 30)),
+  );
+
+  test(
+    'running executable in destination is terminated while unrelated executable in same folder remains alive',
+    () async {
+      final source = await Directory('${temp.path}/source_exe').create();
+      await File(
+        '${source.path}/target_app.exe',
+      ).writeAsString('new binary content');
+
+      final dest = await Directory('${temp.path}/dest_exe').create();
+      final systemCmd =
+          '${Platform.environment['SystemRoot']}\\System32\\cmd.exe';
+      final targetAppExe = File('${dest.path}/target_app.exe');
+      final unrelatedExe = File('${dest.path}/unrelated_app.exe');
+      await File(systemCmd).copy(targetAppExe.path);
+      await File(systemCmd).copy(unrelatedExe.path);
+
+      // Launch both executables with ping loop so they remain running
+      final p1 = await Process.start(targetAppExe.path, [
+        '/c',
+        'ping',
+        '-n',
+        '30',
+        '127.0.0.1',
+      ]);
+      final p2 = await Process.start(unrelatedExe.path, [
+        '/c',
+        'ping',
+        '-n',
+        '30',
+        '127.0.0.1',
+      ]);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+
+      var p2Exited = false;
+      p2.exitCode.then((_) => p2Exited = true);
+
+      final service = FileDeployService();
+      final logs = <String>[];
+      final sub = service.eventStream.listen(logs.add);
+
+      try {
+        await service.startDeploy(
+          targets: [target],
+          config: FileDeployJobConfig(
+            sourcePath: source.path,
+            isDirectory: true,
+            destDir: dest.path,
+            overwrite: true,
+            autoKillIfInUse: true,
+          ),
+        );
+        expect(
+          service.completedCount,
+          1,
+          reason: service.progressList.first.error,
+        );
+        expect(await targetAppExe.readAsString(), 'new binary content');
+
+        // Target executable holding the manifest file must have been terminated
+        await p1.exitCode.timeout(const Duration(seconds: 5));
+
+        // Unrelated executable in same folder must NOT have been killed
+        expect(p2Exited, isFalse);
+        expect(logs.any((s) => s.contains('AUTO_KILL PID=${p1.pid}')), isTrue);
+      } finally {
+        p1.kill();
+        p2.kill();
+        await Future.wait([p1.exitCode, p2.exitCode]);
+        await sub.cancel();
+        service.dispose();
+      }
+    },
+    skip: !Platform.isWindows,
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
+
+  test(
+    'Unlock-DeployManifest protects critical system and app processes',
+    () async {
+      final script =
+          '''
+\$ErrorActionPreference = 'Stop'
+$fileUnlockScript
+Ensure-JADeployLocksType
+\$current = Get-Process -Id \$PID
+\$ft = \$current.StartTime.ToUniversalTime().ToFileTimeUtc()
+\$bytes = [BitConverter]::GetBytes(\$ft)
+\$uProc = New-Object JADeployLocks+UniqueProcess
+\$uProc.Id = \$PID
+\$uProc.Start.dwLowDateTime = [BitConverter]::ToInt32(\$bytes, 0)
+\$uProc.Start.dwHighDateTime = [BitConverter]::ToInt32(\$bytes, 4)
+\$info = New-Object JADeployLocks+Info
+\$info.Process = \$uProc
+try {
+  [JADeployLocks]::CloseUser(\$info, \$PID)
+  Write-Output 'FAIL_NOT_PROTECTED'
+} catch {
+  Write-Output "PROTECTED_OK: \$(\$_.Exception.ToString())"
+}
+''';
+      final res = await ProcessRunner.runPowerShell(script);
+      expect(
+        res.isSuccess,
+        isTrue,
+        reason: 'stderr: ${res.stderr} stdout: ${res.stdout}',
+      );
+      expect(res.stdout, contains('Protected process or service'));
+    },
+    skip: !Platform.isWindows,
+  );
+
+  test(
+    'Unlock-DeployManifest protects explorer case-insensitively',
+    () async {
+      final script =
+          '''
+\$ErrorActionPreference = 'Stop'
+$fileUnlockScript
+Ensure-JADeployLocksType
+\$explorer = Get-Process -Name explorer -ErrorAction SilentlyContinue | Select-Object -First 1
+if (\$explorer) {
+  \$ft = \$explorer.StartTime.ToUniversalTime().ToFileTimeUtc()
+  \$bytes = [BitConverter]::GetBytes(\$ft)
+  \$ftStruct = New-Object System.Runtime.InteropServices.ComTypes.FILETIME
+  \$ftStruct.dwLowDateTime = [BitConverter]::ToInt32(\$bytes, 0)
+  \$ftStruct.dwHighDateTime = [BitConverter]::ToInt32(\$bytes, 4)
+  \$uProc = New-Object JADeployLocks+UniqueProcess
+  \$uProc.Id = \$explorer.Id
+  \$uProc.Start = \$ftStruct
+  \$info = New-Object JADeployLocks+Info
+  \$info.Process = \$uProc
+  try {
+    [JADeployLocks]::CloseUser(\$info, 999999)
+    Write-Output 'FAIL_NOT_PROTECTED'
+  } catch {
+    Write-Output "PROTECTED_OK: \$(\$_.Exception.ToString())"
+  }
+} else {
+  Write-Output 'PROTECTED_OK: Protected application (explorer)'
+}
+''';
+      final res = await ProcessRunner.runPowerShell(script);
+      expect(
+        res.isSuccess,
+        isTrue,
+        reason: 'stderr: ${res.stderr} stdout: ${res.stdout}',
+      );
+      expect(res.stdout, contains('Protected application (explorer)'));
+    },
+    skip: !Platform.isWindows,
+  );
+
+  test(
+    'transient sharing violation succeeds after retry within 3 attempts',
+    () async {
+      final source = await File(
+        '${temp.path}/retry_src.txt',
+      ).writeAsString('retry content');
+      final dest = await Directory('${temp.path}/retry_dest').create();
+
+      var attempts = 0;
+      final service = FileDeployService(
+        copyFile: (src, dst) async {
+          attempts++;
+          if (attempts < 3) {
+            throw const FileSystemException(
+              'The process cannot access the file because it is being used by another process.',
+              '',
+              OSError('Sharing violation', 32),
+            );
+          }
+          return await src.copy(dst);
+        },
+      );
+      addTearDown(service.dispose);
+
+      await service.startDeploy(
+        targets: [target],
+        config: FileDeployJobConfig(
+          sourcePath: source.path,
+          destDir: dest.path,
+          overwrite: true,
+          autoKillIfInUse: true,
+        ),
+      );
+
+      expect(service.completedCount, 1);
+      expect(attempts, 3);
+      expect(
+        await File('${dest.path}/retry_src.txt').readAsString(),
+        'retry content',
+      );
+    },
+  );
+
+  test(
+    'permanent error cleans up partial file if destination was new',
+    () async {
+      final source = await File(
+        '${temp.path}/perm_src.txt',
+      ).writeAsString('hello');
+      final dest = await Directory('${temp.path}/perm_dest').create();
+      final destFile = File('${dest.path}/perm_src.txt');
+
+      final service = FileDeployService(
+        copyFile: (src, dst) async {
+          await File(dst).writeAsString('partial data');
+          throw const FileSystemException(
+            'Permanent disk error',
+            '',
+            OSError('Access Denied', 5),
+          );
+        },
+      );
+      addTearDown(service.dispose);
+
+      await service.startDeploy(
+        targets: [target],
+        config: FileDeployJobConfig(
+          sourcePath: source.path,
+          destDir: dest.path,
+          overwrite: true,
+          autoKillIfInUse: true,
+        ),
+      );
+
+      expect(service.failedCount, 1);
+      expect(await destFile.exists(), isFalse);
+    },
+  );
+
+  test(
+    'deploying same source and destination throws ArgumentError before unlock',
+    () async {
+      final file = await File('${temp.path}/same.txt').writeAsString('same');
+      var unlockCalls = 0;
+      final service = FileDeployService(
+        runPowerShell:
+            (
+              script, {
+              computerName,
+              username,
+              password,
+              timeoutSeconds = 15,
+            }) async {
+              unlockCalls++;
+              throw StateError('Unlock must not run for an invalid manifest');
+            },
+      );
+      addTearDown(service.dispose);
+
+      await service.startDeploy(
+        targets: [target],
+        config: FileDeployJobConfig(
+          sourcePath: file.path,
+          destDir: temp.path,
+          overwrite: true,
+          autoKillIfInUse: true,
+        ),
+      );
+
+      expect(service.failedCount, 1);
+      expect(
+        service.progressList.first.error,
+        contains('Source and destination must be different'),
+      );
+      expect(unlockCalls, 0);
+    },
   );
 }

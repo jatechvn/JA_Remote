@@ -1,12 +1,9 @@
 /// Runs on the machine owning the destination file. Restart Manager identifies
 /// actual file users; executable names and command-line substrings are not used.
 const fileUnlockScript = r'''
-function Unlock-DeployFile([string]$file) {
-  if (!(Test-Path -LiteralPath $file -PathType Leaf)) { return }
-  $fullPath = [IO.Path]::GetFullPath($file)
-  try {
-    if (-not ('JADeployLocks' -as [type])) {
-      Add-Type -TypeDefinition @'
+function Ensure-JADeployLocksType {
+  if (-not ('JADeployLocks' -as [type])) {
+    Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -44,30 +41,84 @@ public static class JADeployLocks {
       return new Info[0];
     } finally { RmEndSession(h); }
   }
-  public static string CloseUser(Info info, int protectedId) {
+  static Process EligibleUser(Info info, int protectedId) {
     if (info.Process.Id <= 4 || info.Process.Id == protectedId || info.Type == 3 || info.Type == 1000)
-      throw new InvalidOperationException("Protected process/service holds the destination file");
+      throw new InvalidOperationException("Protected process or service (PID " + info.Process.Id + ") holds destination file");
     Process process;
     try { process = Process.GetProcessById(info.Process.Id); }
     catch (ArgumentException) { return null; }
-    using (process) {
+    try {
       long expected = ((long)info.Process.Start.dwHighDateTime << 32) | (uint)info.Process.Start.dwLowDateTime;
-      if (process.StartTime.ToUniversalTime().ToFileTimeUtc() != expected) return null;
+      try {
+        if (process.StartTime.ToUniversalTime().ToFileTimeUtc() != expected) { process.Dispose(); return null; }
+      } catch (Win32Exception) {
+        throw new InvalidOperationException("Access denied inspecting process PID " + info.Process.Id);
+      }
       string name = process.ProcessName;
-      if (name == "ja_remote" || name == "wsmprovhost" || name == "explorer")
-        throw new InvalidOperationException("Protected application holds the destination file");
-      process.Kill();
-      if (!process.WaitForExit(3000)) throw new TimeoutException("Lock holder did not exit");
+      if (string.Equals(name, "ja_remote", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(name, "wsmprovhost", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(name, "explorer", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Protected application (" + name + ") holds destination file");
+      return process;
+    } catch { process.Dispose(); throw; }
+  }
+  public static void ValidateUser(Info info, int protectedId) {
+    using (Process process = EligibleUser(info, protectedId)) {}
+  }
+  public static string CloseUser(Info info, int protectedId) {
+    using (Process process = EligibleUser(info, protectedId)) {
+      if (process == null) return null;
+      string name = process.ProcessName;
+      try {
+        process.Kill();
+      } catch (Win32Exception ex) {
+        throw new InvalidOperationException("Access denied terminating process PID " + info.Process.Id + " (" + name + "): " + ex.Message);
+      }
+      if (!process.WaitForExit(3000)) throw new TimeoutException("Lock holder PID " + info.Process.Id + " (" + name + ") did not exit within deadline");
       return "AUTO_KILL PID=" + info.Process.Id + " NAME=" + name;
     }
   }
 }
 '@
+  }
+}
+
+function Unlock-DeployManifest([string[]]$files) {
+  Ensure-JADeployLocksType
+  $allHolders = @{}
+  foreach ($file in $files) {
+    if (Test-Path -LiteralPath $file -PathType Leaf) {
+      $fullPath = [IO.Path]::GetFullPath($file)
+      try {
+        $users = [JADeployLocks]::Users($fullPath)
+        foreach ($u in $users) {
+          $key = "$($u.Process.Id)_$($u.Process.Start.dwHighDateTime)_$($u.Process.Start.dwLowDateTime)"
+          if (-not $allHolders.ContainsKey($key)) {
+            $allHolders[$key] = @{ Info = $u; File = $file }
+          }
+        }
+      } catch {
+        throw "Failed to query lock holders for '$file': $_"
+      }
     }
-    foreach ($holder in [JADeployLocks]::Users($fullPath)) {
-      $result = [JADeployLocks]::CloseUser($holder, $PID)
-      if ($result) { Write-Output "$result FILE=$file" }
+  }
+  # Validate every holder before terminating the first one. CloseUser rechecks
+  # identity and protection immediately before termination.
+  foreach ($entry in $allHolders.Values) {
+    try { [JADeployLocks]::ValidateUser($entry.Info, $PID) }
+    catch { throw "Cannot unlock '$($entry.File)': $_" }
+  }
+  foreach ($entry in $allHolders.Values) {
+    try {
+      $res = [JADeployLocks]::CloseUser($entry.Info, $PID)
+      if ($res) { Write-Output "$res FILE=$($entry.File)" }
+    } catch {
+      throw "Failed to unlock '$($entry.File)': $_"
     }
-  } catch {}
+  }
+}
+
+function Unlock-DeployFile([string]$file) {
+  Unlock-DeployManifest @($file)
 }
 ''';

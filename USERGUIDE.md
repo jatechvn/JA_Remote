@@ -1,4 +1,4 @@
-# Hướng dẫn sử dụng JA Remote v1.3.0
+# Hướng dẫn sử dụng JA Remote v1.3.1
 
 ## Cài đặt ứng dụng
 
@@ -9,7 +9,7 @@
 - Đăng ký mục gỡ cài đặt chính quy trong Windows Settings & Control Panel. Khi muốn gỡ bỏ, bạn có thể gỡ từ Control Panel hoặc chạy `uninstall.bat`.
 
 ### 2. Sử dụng bản Portable
-- Giải nén toàn bộ `JA_Remote_v1.3.0_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy trực tiếp `ja_remote.exe`.
+- Giải nén toàn bộ `JA_Remote_v1.3.1_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy trực tiếp `ja_remote.exe`.
 - Chạy `debug.bat` khi cần bật chế độ debug ghi log chẩn đoán và hiển thị badge thời gian build. Bản phát hành dành cho Windows x64.
 
 ## Thiết bị và quét LAN
@@ -36,7 +36,7 @@
 3. **Tùy chọn nâng cao:**
    - *Tạo thư mục nếu chưa có:* Tự động tạo cây thư mục đích nếu máy từ xa chưa tồn tại.
    - *Ghi đè file nếu đã tồn tại:* Cho phép ghi đè phiên bản mới.
-   - *Tự động đóng file/tiến trình đang chạy:* Tự động quét và terminate tiến trình đang chiếm giữ khóa file trên máy đích, đồng thời sử dụng cơ chế an toàn đổi tên (`.jad_old_*`) để thay thế các tệp đang mở ở chế độ Memory-Mapped Section mà không gây lỗi khóa tệp.
+   - *Tự động đóng file/tiến trình đang chạy:* Tự động truy vấn Windows Restart Manager (`rstrtmgr.dll`) trước khi đổi tên/di chuyển, đóng chính xác tiến trình giữ file đích sắp thay thế; tuyệt đối không kill theo thư mục; hỗ trợ bounded micro-retry 3 lần và bảo toàn rollback khôi phục backup hoặc dọn partial file.
 4. **Hỗ trợ thư mục lớn:** Hệ thống tự động chuyển giao thức kịch bản sang file UTF-8 BOM tạm thời khi khối lượng danh sách file lớn, triệt tiêu hoàn toàn giới hạn 32.767 ký tự của dòng lệnh Windows (`ProcessThe filename or extension is too long`).
 5. **Giao diện tự động thích ứng (Responsive Auto-Collapse):** Khi màn hình có chiều cao hạn chế (< 720px), khối *Target Devices* tự động thu gọn để đảm bảo nút **Start File Deploy** luôn hiện rõ trong tầm nhìn; người dùng có thể click vào thanh tiêu đề để mở rộng/thu gọn thủ công bất cứ lúc nào.
 
