@@ -1,4 +1,4 @@
-# Hướng dẫn sử dụng JA Remote v1.3.1
+# Hướng dẫn sử dụng JA Remote v1.3.2
 
 ## Cài đặt ứng dụng
 
@@ -9,7 +9,7 @@
 - Đăng ký mục gỡ cài đặt chính quy trong Windows Settings & Control Panel. Khi muốn gỡ bỏ, bạn có thể gỡ từ Control Panel hoặc chạy `uninstall.bat`.
 
 ### 2. Sử dụng bản Portable
-- Giải nén toàn bộ `JA_Remote_v1.3.1_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy trực tiếp `ja_remote.exe`.
+- Giải nén toàn bộ `JA_Remote_v1.3.2_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy trực tiếp `ja_remote.exe`.
 - Chạy `debug.bat` khi cần bật chế độ debug ghi log chẩn đoán và hiển thị badge thời gian build. Bản phát hành dành cho Windows x64.
 
 ## Thiết bị và quét LAN

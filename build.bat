@@ -27,7 +27,7 @@ set APP_NAME=JA_Remote
 for /f "tokens=2 delims=: " %%a in ('findstr /r "^version:" pubspec.yaml') do (
     for /f "tokens=1 delims=+" %%v in ("%%a") do set APP_VERSION=%%v
 )
-if "%APP_VERSION%"=="" set APP_VERSION=1.3.1
+if "%APP_VERSION%"=="" set APP_VERSION=1.3.2
 
 set ZIP_NAME=%APP_NAME%_v%APP_VERSION%_Windows_x64.zip
 set STAGING_NAME=%APP_NAME%_v%APP_VERSION%_Windows_x64

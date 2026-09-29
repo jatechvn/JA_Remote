@@ -4,7 +4,7 @@
 
 Quản trị máy trạm qua LAN cho nhà xưởng, trạm kiểm thử và văn phòng.
 
-![Version](https://img.shields.io/badge/version-1.3.1-blue) ![Platform](https://img.shields.io/badge/platform-Windows_x64-0078D4) ![Dart](https://img.shields.io/badge/Dart-%3E%3D3.12.2-0175C2) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-1.3.2-blue) ![Platform](https://img.shields.io/badge/platform-Windows_x64-0078D4) ![Dart](https://img.shields.io/badge/Dart-%3E%3D3.12.2-0175C2) ![License](https://img.shields.io/badge/license-MIT-green)
 
 [Download](https://github.com/jatechvn/JA_Remote/releases) · [User Guide](USERGUIDE.md) · [Changelog](CHANGELOG.md) · [JA-Tech](https://jatechvn.github.io/)
 
@@ -113,6 +113,7 @@ RELEASE_NOTES.md            # Metadata và nội dung GitHub Release
 
 ## Thay đổi gần đây
 
+- **v1.3.2:** Nâng cấp biểu tượng ứng dụng Windows (`app_icon.ico`) thành bộ icon đa tầng phân giải chuẩn Windows gồm 7 khung kích thước (`256x256, 128x128, 64x64, 48x48, 32x32, 24x24, 16x16` 32-bit ARGB PNG), hiển thị sắc nét trên Windows Explorer, thanh Taskbar, khay Alt+Tab, thanh tiêu đề và phím tắt Desktop/Start Menu.
 - **v1.3.1:** Preflight Manifest Unlock cho File Deploy sử dụng Windows Restart Manager (`rstrtmgr.dll`) trước khi đổi tên/ghi đè; dừng chính xác tiến trình giữ file đích và tuyệt đối không kill theo thư mục; bảo vệ tiến trình hệ thống và chống PID reuse; cơ chế bounded micro-retry 3 lần trên sharing violation và bảo toàn rollback/cleanup toàn vẹn.
 - **v1.3.0:** Hệ thống tự động cập nhật mạng nội bộ LAN Over-The-Air (OTA) qua SMB/UNC với xác thực DPAPI an toàn và kịch bản bàn giao `apply_update.bat` bảo tồn 100% dữ liệu cấu hình; bộ 3 kịch bản cài đặt/gỡ bỏ chuẩn Windows Zero-Admin (`install.bat`, `uninstall.bat`, `uninstall.ps1`); mã hóa két thông tin đăng nhập Windows DPAPI Vault và per-device credentials; tối ưu hóa subnet scanner và TCP port fallback.
 - **v1.2.1:** Nâng cấp hộp thoại chọn thư mục trong File Deployer lên chuẩn Windows Explorer hiện đại (thanh địa chỉ breadcrumb, dán trực tiếp đường dẫn, tìm kiếm nhanh và Quick Access/Favorites); tự động điều hướng `initialDirectory` thông minh và tối ưu hóa null-safety.
