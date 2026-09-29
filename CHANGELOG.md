@@ -1,5 +1,18 @@
 # CHANGELOG — JA Remote
 
+## [v1.3.2] - 2026-09-29
+
+### 🚀 Nâng cấp & Tính năng mới
+- **Multi-Resolution Windows Native App Icon:**
+  - Nâng cấp biểu tượng ứng dụng Windows (`app_icon.ico`) thành bộ icon đa tầng phân giải chuẩn Windows gồm 7 khung kích thước (`256x256, 128x128, 64x64, 48x48, 32x32, 24x24, 16x16` 32-bit ARGB PNG).
+  - Tự động hiển thị sắc nét, không bị vỡ hạt hay méo khung trên Windows Explorer, thanh Taskbar, khay Alt+Tab, thanh tiêu đề cửa sổ (`win32_window.cpp`) và phím tắt Desktop/Start Menu tạo bởi `install.bat`.
+  - Lưu trữ icon nguồn tại `assets/logo.ico`.
+
+### 📦 Phát hành
+- Đồng bộ version 1.3.2+7 trong `pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `config_sample.json`, `install.bat`, `build.bat`, `USERGUIDE.md`, `README.md`, `RELEASE_NOTES.md`.
+
+---
+
 ## [v1.3.1] - 2026-09-25
 
 ### 🚀 Nâng cấp & Tính năng mới
