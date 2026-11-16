@@ -6,9 +6,33 @@ import '../data/repositories/log_repository.dart';
 
 /// Service for remote power operations: Wake-on-LAN, Restart, and Shutdown.
 class PowerService {
-  final LogRepository _logRepo = LogRepository();
+  static List<NetworkInterfaceDetails>? _cachedAdapters;
+  static DateTime? _adaptersCachedAt;
+  static Future<List<NetworkInterfaceDetails>>? _inflightAdapters;
 
-  /// Wakes a PC via Wake-on-LAN Magic Packet.
+  final LogRepository _logRepo = LogRepository();
+  final Future<List<NetworkInterfaceDetails>> Function() _loadAdapters;
+
+  PowerService({Future<List<NetworkInterfaceDetails>> Function()? loadAdapters})
+    : _loadAdapters = loadAdapters ?? _defaultLoadAdapters;
+
+  static Future<List<NetworkInterfaceDetails>> _defaultLoadAdapters() async {
+    final now = DateTime.now();
+    if (_cachedAdapters != null &&
+        _adaptersCachedAt != null &&
+        now.difference(_adaptersCachedAt!) < const Duration(seconds: 30)) {
+      return _cachedAdapters!;
+    }
+    _inflightAdapters ??= NetworkUtils.getAvailableAdapters().then((list) {
+      _cachedAdapters = list;
+      _adaptersCachedAt = DateTime.now();
+      _inflightAdapters = null;
+      return list;
+    });
+    return _inflightAdapters!;
+  }
+
+  /// Wakes a PC via Wake-on-LAN Magic Packet using supernet-aware directed broadcast.
   Future<bool> wakeDevice(ManagedDevice device) async {
     final mac = device.mac;
     if (mac == null || mac.isEmpty) {
@@ -22,8 +46,15 @@ class PowerService {
       return false;
     }
 
-    final broadcast = NetworkUtils.getBroadcastIp(device.ip);
-    final ok = await WakeOnLan.wake(mac: mac, broadcastIp: broadcast);
+    final adapters = await _loadAdapters();
+    final resolved = NetworkUtils.resolveDirectedBroadcast(device.ip, adapters);
+    final fallback24 = NetworkUtils.getBroadcastIp(device.ip);
+    final ok = await WakeOnLan.wake(
+      mac: mac,
+      broadcastIp: resolved.broadcastIp,
+      localBindIp: resolved.localBindIp,
+      extraBroadcastIps: [if (fallback24 != resolved.broadcastIp) fallback24],
+    );
 
     _logRepo.addLog(
       deviceName: device.name,
@@ -31,7 +62,7 @@ class PowerService {
       action: 'WOL',
       status: ok ? 'SUCCESS' : 'FAILED',
       message: ok
-          ? 'Đã gửi Magic Packet tới MAC $mac qua broadcast $broadcast'
+          ? 'Đã gửi Magic Packet tới MAC $mac qua broadcast ${resolved.broadcastIp}'
           : 'Lỗi gửi gói Magic Packet.',
     );
 

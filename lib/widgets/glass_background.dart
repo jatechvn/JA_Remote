@@ -22,35 +22,52 @@ class _MeshOrbState extends State<MeshOrb> with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: widget.duration,
-  )..repeat(reverse: true);
-
-  late final AppLifecycleListener _lifecycleListener;
+  );
 
   @override
   void initState() {
     super.initState();
-    // Stops the drift while the window is minimized/hidden, mirroring the
-    // Page Visibility low-power sleep mode added to UI_DESIGN_Sample.html
-    // (`visibilitychange` -> orb.animationPlayState = 'paused', 0% background CPU).
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (state) {
-        switch (state) {
-          case AppLifecycleState.hidden:
-          case AppLifecycleState.paused:
-            _controller.stop();
-          case AppLifecycleState.resumed:
-            _controller.repeat(reverse: true);
-          case AppLifecycleState.inactive:
-          case AppLifecycleState.detached:
-            break;
-        }
-      },
+    // Pauses the drift while the window is unfocused, minimized/hidden, or in
+    // 12s Idle Sleep Mode via AppPowerManager (0% background GPU/CPU).
+    if (AppPowerManager.instance.shouldAnimateBackground) {
+      _resumeAnimation();
+    }
+    AppPowerManager.instance.backgroundAnimationNotifier.addListener(
+      _onPowerChanged,
     );
+  }
+
+  void _onPowerChanged() {
+    if (!mounted) return;
+    if (AppPowerManager.instance.shouldAnimateBackground) {
+      if (!_controller.isAnimating) {
+        _resumeAnimation();
+      }
+    } else {
+      if (_controller.isAnimating) {
+        _controller.stop();
+      }
+    }
+  }
+
+  void _resumeAnimation() {
+    final bool reverseFirst = _controller.status == AnimationStatus.reverse;
+    if (reverseFirst) {
+      _controller.reverse().then((_) {
+        if (mounted && AppPowerManager.instance.shouldAnimateBackground) {
+          _controller.repeat(reverse: true);
+        }
+      });
+    } else {
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    AppPowerManager.instance.backgroundAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
     _controller.dispose();
     super.dispose();
   }
@@ -131,6 +148,3 @@ class MeshBackground extends StatelessWidget {
     );
   }
 }
-
-/// Reusable frosted-glass surface: blurred backdrop + soft outer shadow +
-/// a faint top-edge highlight line standing in for a native inset shadow.

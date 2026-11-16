@@ -29,35 +29,39 @@ class _BorderBeamState extends State<BorderBeam>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: widget.duration,
-  )..repeat();
-
-  late final AppLifecycleListener _lifecycleListener;
+  );
 
   @override
   void initState() {
     super.initState();
-    // Stops the gradient sweep while the window is minimized/hidden,
-    // mirroring the Page Visibility low-power sleep mode added to
-    // UI_DESIGN_Sample.html (0% background CPU when document.hidden).
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (state) {
-        switch (state) {
-          case AppLifecycleState.hidden:
-          case AppLifecycleState.paused:
-            _controller.stop();
-          case AppLifecycleState.resumed:
-            _controller.repeat();
-          case AppLifecycleState.inactive:
-          case AppLifecycleState.detached:
-            break;
-        }
-      },
+    // Stops the gradient sweep while the window is unfocused or minimized/hidden
+    // via AppPowerManager.
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      _controller.repeat();
+    }
+    AppPowerManager.instance.indicatorsAnimationNotifier.addListener(
+      _onPowerChanged,
     );
+  }
+
+  void _onPowerChanged() {
+    if (!mounted) return;
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      if (!_controller.isAnimating) {
+        _controller.repeat();
+      }
+    } else {
+      if (_controller.isAnimating) {
+        _controller.stop();
+      }
+    }
   }
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    AppPowerManager.instance.indicatorsAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
     _controller.dispose();
     super.dispose();
   }

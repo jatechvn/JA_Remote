@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
+import '../services/app_power_manager.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_provider.dart';
 import '../theme/styles_win10.dart';

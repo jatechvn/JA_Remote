@@ -1610,6 +1610,36 @@ class _FileDeployViewState extends State<FileDeployView> {
                           }
                         },
                       ),
+                      const SizedBox(width: 6),
+                      GlassButton(
+                        label: language.t('deploy_btn_select_failed', {
+                          'count': _deployService.failedCount.toString(),
+                        }),
+                        icon: Icons.checklist_rtl_rounded,
+                        colors: colors,
+                        accentColor: colors.accentAmber,
+                        onTap: () {
+                          final failedIds = _deployService.progressList
+                              .where(
+                                (p) =>
+                                    p.status == DeployStatus.failed ||
+                                    p.status == DeployStatus.cancelled,
+                              )
+                              .map((p) => p.device.id)
+                              .toList();
+                          context.read<DeviceService>().selectByIds(failedIds);
+                          showAppToast(
+                            context,
+                            colors: colors,
+                            message: language.t(
+                              'deploy_toast_selected_failed',
+                              {'count': failedIds.length.toString()},
+                            ),
+                            icon: Icons.check_circle_rounded,
+                            accentColor: colors.accentAmber,
+                          );
+                        },
+                      ),
                     ],
                   ],
                 ),

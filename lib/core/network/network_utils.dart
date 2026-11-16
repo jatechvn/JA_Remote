@@ -542,16 +542,97 @@ class NetworkUtils {
     return true;
   }
 
-  /// Calculates the directed broadcast IP for a given subnet (e.g. 192.168.1.255).
+  /// Calculates the exact directed broadcast IP for a CIDR string or IPv4 host.
+  ///
+  /// When a CIDR prefix is included (e.g. `172.21.174.80/21`), the bitwise
+  /// subnet broadcast (`172.21.175.255`) is returned. For plain IPv4 inputs without
+  /// a prefix, falls back to the `.255` `/24` broadcast.
   static String getBroadcastIp(String ipOrCidr) {
     try {
-      final clean = ipOrCidr.split('/')[0].trim();
+      final raw = ipOrCidr.trim();
+      if (raw.contains('/')) {
+        final slashParts = raw.split('/');
+        final ipPart = slashParts[0].trim();
+        final prefix = int.tryParse(slashParts[1].trim());
+        final octets = ipPart
+            .split('.')
+            .map((e) => int.tryParse(e) ?? -1)
+            .toList();
+        if (prefix != null &&
+            prefix >= 0 &&
+            prefix <= 32 &&
+            octets.length == 4 &&
+            !octets.any((o) => o < 0 || o > 255)) {
+          final ipInt =
+              (octets[0] << 24) |
+              (octets[1] << 16) |
+              (octets[2] << 8) |
+              octets[3];
+          final mask = prefix == 0 ? 0 : ((~0 << (32 - prefix)) & 0xFFFFFFFF);
+          final broadcastInt = (ipInt & mask) | (~mask & 0xFFFFFFFF);
+          final o1 = (broadcastInt >> 24) & 0xFF;
+          final o2 = (broadcastInt >> 16) & 0xFF;
+          final o3 = (broadcastInt >> 8) & 0xFF;
+          final o4 = broadcastInt & 0xFF;
+          return '$o1.$o2.$o3.$o4';
+        }
+      }
+
+      final clean = raw.split('/')[0].trim();
       final parts = clean.split('.');
-      if (parts.length == 4) {
+      if (parts.length == 4 && isValidIp(clean)) {
         return '${parts[0]}.${parts[1]}.${parts[2]}.255';
       }
     } catch (_) {}
     return '255.255.255.255';
+  }
+
+  /// Matches [targetIp] against local [adapters] to determine the supernet-aware
+  /// directed broadcast address (e.g. `/21` -> `.175.255`) and preferred local
+  /// bind IPv4 on the matching physical NIC.
+  static ({String broadcastIp, String? localBindIp}) resolveDirectedBroadcast(
+    String targetIp,
+    List<NetworkInterfaceDetails> adapters,
+  ) {
+    final cleanTarget = targetIp.split('/').first.trim();
+    if (!isValidIp(cleanTarget)) {
+      return (broadcastIp: '255.255.255.255', localBindIp: null);
+    }
+
+    final targetOctets = cleanTarget
+        .split('.')
+        .map((e) => int.tryParse(e) ?? 0)
+        .toList();
+    final targetInt =
+        (targetOctets[0] << 24) |
+        (targetOctets[1] << 16) |
+        (targetOctets[2] << 8) |
+        targetOctets[3];
+
+    for (final adapter in adapters) {
+      if (!isValidIp(adapter.ip)) continue;
+      final prefix = adapter.prefixLength;
+      if (prefix <= 0 || prefix > 32) continue;
+
+      final adapterOctets = adapter.ip
+          .split('.')
+          .map((e) => int.tryParse(e) ?? 0)
+          .toList();
+      final adapterInt =
+          (adapterOctets[0] << 24) |
+          (adapterOctets[1] << 16) |
+          (adapterOctets[2] << 8) |
+          adapterOctets[3];
+      final mask = (~0 << (32 - prefix)) & 0xFFFFFFFF;
+      if ((targetInt & mask) == (adapterInt & mask)) {
+        return (
+          broadcastIp: getBroadcastIp('${adapter.ip}/$prefix'),
+          localBindIp: adapter.ip,
+        );
+      }
+    }
+
+    return (broadcastIp: getBroadcastIp(cleanTarget), localBindIp: null);
   }
 
   /// Compares two IPv4 addresses numerically.

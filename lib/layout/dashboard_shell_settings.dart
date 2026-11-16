@@ -1,133 +1,212 @@
 part of 'dashboard_shell.dart';
 
-class TopBarExpandingButton extends StatefulWidget {
-  final Widget icon;
-  final String? collapsedLabel;
-  final String expandedLabel;
-  final Color? textColor;
-  final VoidCallback onTap;
-  final String tooltip;
-  final AppColors colors;
-  final bool isCompact;
+void _showDashboardSettingsDialog({
+  required BuildContext context,
+  required ThemeProvider theme,
+  required LanguageProvider language,
+  required String appVersion,
+  required bool isDebug,
+  required bool Function() isMounted,
+}) {
+  final colors = theme.colors;
+  final origCardBlur = theme.cardBlur;
+  final origCardOpacity = theme.cardOpacity;
+  final origDialogBlur = theme.dialogBlur;
+  final origDialogOpacity = theme.dialogOpacity;
+  final origDropdownBlur = theme.dropdownBlur;
+  final origDropdownOpacity = theme.dropdownOpacity;
+  final origEnableIdleSleep = AppPowerManager.instance.enableIdleSleep;
+  final origIdleTimeout = AppPowerManager.instance.idleTimeoutSeconds;
 
-  const TopBarExpandingButton({
-    super.key,
-    required this.icon,
-    this.collapsedLabel,
-    required this.expandedLabel,
-    this.textColor,
-    required this.onTap,
-    required this.tooltip,
-    required this.colors,
-    this.isCompact = false,
-  });
+  double localCardBlur = origCardBlur;
+  double localCardOpacity = origCardOpacity;
+  double localDialogBlur = origDialogBlur;
+  double localDialogOpacity = origDialogOpacity;
+  double localDropdownBlur = origDropdownBlur;
+  double localDropdownOpacity = origDropdownOpacity;
+  bool localEnableIdleSleep = origEnableIdleSleep;
+  int localIdleTimeoutSeconds = origIdleTimeout;
 
-  @override
-  State<TopBarExpandingButton> createState() => _TopBarExpandingButtonState();
-}
+  int activeTab = 0;
 
-class _TopBarExpandingButtonState extends State<TopBarExpandingButton> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = widget.colors;
-    final showLabel =
-        _isHovered || (!widget.isCompact && widget.collapsedLabel != null);
-    final currentLabel = _isHovered
-        ? widget.expandedLabel
-        : (widget.collapsedLabel ?? '');
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      cursor: SystemMouseCursors.click,
-      child: Tooltip(
-        message: widget.tooltip,
-        child: AnimatedScale(
-          scale: _isHovered ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: widget.onTap,
-              borderRadius: BorderRadius.circular(100),
-              splashFactory: NoSplash.splashFactory,
-              hoverColor: Colors.transparent,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                padding: EdgeInsets.symmetric(
-                  horizontal: showLabel ? 11 : 8,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _isHovered
-                      ? colors.cardHoverBg.withValues(alpha: 0.35)
-                      : colors.subCardBg,
-                  borderRadius: BorderRadius.circular(100),
-                  border: Border.all(
-                    color: _isHovered
-                        ? (widget.textColor ?? colors.accentCyan).withValues(
-                            alpha: 0.65,
-                          )
-                        : colors.subCardBorder,
-                    width: _isHovered ? 1.2 : 1.0,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _isHovered
-                          ? (widget.textColor ?? colors.primaryGlow).withValues(
-                              alpha: 0.25,
-                            )
-                          : Colors.black.withValues(alpha: 0.04),
-                      blurRadius: _isHovered ? 10 : 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    widget.icon,
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOutCubic,
-                      clipBehavior: Clip.none,
-                      child: showLabel && currentLabel.isNotEmpty
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(width: 6),
-                                Text(
-                                  currentLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  style: TextStyle(
-                                    color:
-                                        widget.textColor ?? colors.textPrimary,
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
+  showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return GlassDialog(
+            title: language.t('settings_dialog_title'),
+            icon: Icons.tune_rounded,
+            isDark: theme.isDark,
+            width: 700,
+            height: 590,
+            contentPadding: EdgeInsets.zero,
+            blurSigma: localDialogBlur,
+            bgOpacity: localDialogOpacity,
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx, false);
+                },
+                child: Text(
+                  language.t('action_cancel'),
+                  style: TextStyle(color: colors.textSecondary),
                 ),
               ),
+              const SizedBox(width: 8),
+              GlowingActionButton(
+                height: 36,
+                colors: colors,
+                icon: Icons.save_rounded,
+                label: language.t('action_save'),
+                onPressed: () {
+                  theme.saveSettings();
+                  unawaited(AppPowerManager.instance.saveSettings());
+                  Navigator.pop(ctx, true);
+                },
+              ),
+            ],
+            child: Column(
+              children: [
+                _SettingsTabSelector(
+                  activeTab: activeTab,
+                  colors: colors,
+                  language: language,
+                  onTabSelected: (index) {
+                    setDialogState(() => activeTab = index);
+                  },
+                ),
+                Divider(color: colors.subCardBorder, height: 1),
+                Expanded(
+                  child: activeTab == 0
+                      ? _SettingsGlassTuningTab(
+                          colors: colors,
+                          theme: theme,
+                          language: language,
+                          localCardBlur: localCardBlur,
+                          localCardOpacity: localCardOpacity,
+                          localDialogBlur: localDialogBlur,
+                          localDialogOpacity: localDialogOpacity,
+                          localDropdownBlur: localDropdownBlur,
+                          localDropdownOpacity: localDropdownOpacity,
+                          localEnableIdleSleep: localEnableIdleSleep,
+                          localIdleTimeoutSeconds: localIdleTimeoutSeconds,
+                          onCardBlurChanged: (v) {
+                            setDialogState(() => localCardBlur = v);
+                            theme.setLiveGlassmorphism(cardBlur: v);
+                          },
+                          onCardOpacityChanged: (v) {
+                            setDialogState(() => localCardOpacity = v);
+                            theme.setLiveGlassmorphism(cardOpacity: v);
+                          },
+                          onDialogBlurChanged: (v) {
+                            setDialogState(() => localDialogBlur = v);
+                            theme.setLiveGlassmorphism(dialogBlur: v);
+                          },
+                          onDialogOpacityChanged: (v) {
+                            setDialogState(() => localDialogOpacity = v);
+                            theme.setLiveGlassmorphism(dialogOpacity: v);
+                          },
+                          onDropdownBlurChanged: (v) {
+                            setDialogState(() => localDropdownBlur = v);
+                            theme.setLiveGlassmorphism(dropdownBlur: v);
+                          },
+                          onDropdownOpacityChanged: (v) {
+                            setDialogState(() => localDropdownOpacity = v);
+                            theme.setLiveGlassmorphism(dropdownOpacity: v);
+                          },
+                          onEnableIdleSleepChanged: (v) {
+                            setDialogState(() => localEnableIdleSleep = v);
+                            AppPowerManager.instance.setEnableIdleSleep(
+                              v,
+                              persist: false,
+                            );
+                          },
+                          onIdleTimeoutChanged: (sec) {
+                            setDialogState(() => localIdleTimeoutSeconds = sec);
+                            AppPowerManager.instance.setIdleTimeoutSeconds(
+                              sec,
+                              persist: false,
+                            );
+                          },
+                          onResetDefaults: () {
+                            setDialogState(() {
+                              localCardBlur = 20.0;
+                              localCardOpacity = 0.25;
+                              localDialogBlur = 20.0;
+                              localDialogOpacity = 0.85;
+                              localDropdownBlur = 20.0;
+                              localDropdownOpacity = 0.95;
+                              localEnableIdleSleep = true;
+                              localIdleTimeoutSeconds = 12;
+                            });
+                            theme.setLiveGlassmorphism(
+                              cardBlur: 20.0,
+                              cardOpacity: 0.25,
+                              dialogBlur: 20.0,
+                              dialogOpacity: 0.85,
+                              dropdownBlur: 20.0,
+                              dropdownOpacity: 0.95,
+                            );
+                            AppPowerManager.instance.setEnableIdleSleep(
+                              true,
+                              persist: false,
+                            );
+                            AppPowerManager.instance.setIdleTimeoutSeconds(
+                              12,
+                              persist: false,
+                            );
+                          },
+                        )
+                      : (activeTab == 1
+                            ? _SettingsOtaUpdateTab(
+                                colors: colors,
+                                language: language,
+                              )
+                            : (activeTab == 2
+                                  ? _SettingsMacOuiTab(
+                                      colors: colors,
+                                      language: language,
+                                    )
+                                  : (activeTab == 3
+                                        ? _SettingsUserGuideTab(
+                                            colors: colors,
+                                            language: language,
+                                          )
+                                        : _SettingsAboutTab(
+                                            colors: colors,
+                                            theme: theme,
+                                            language: language,
+                                            appVersion: appVersion,
+                                            isDebug: isDebug,
+                                          )))),
+                ),
+              ],
             ),
-          ),
-        ),
-      ),
+          );
+        },
+      );
+    },
+  ).then((saved) {
+    if (!isMounted() || saved == true) return;
+    theme.setLiveGlassmorphism(
+      cardBlur: origCardBlur,
+      cardOpacity: origCardOpacity,
+      dialogBlur: origDialogBlur,
+      dialogOpacity: origDialogOpacity,
+      dropdownBlur: origDropdownBlur,
+      dropdownOpacity: origDropdownOpacity,
     );
-  }
+    AppPowerManager.instance.setEnableIdleSleep(
+      origEnableIdleSleep,
+      persist: false,
+    );
+    AppPowerManager.instance.setIdleTimeoutSeconds(
+      origIdleTimeout,
+      persist: false,
+    );
+  });
 }
-
-/// Backward compatibility alias
-typedef TopBarPillButton = TopBarExpandingButton;
 
 class _SettingsTabSelector extends StatelessWidget {
   const _SettingsTabSelector({
@@ -212,1804 +291,6 @@ class _SettingsTabSelector extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SettingsGlassTuningTab extends StatelessWidget {
-  const _SettingsGlassTuningTab({
-    required this.colors,
-    required this.theme,
-    required this.language,
-    required this.localCardBlur,
-    required this.localCardOpacity,
-    required this.localDialogBlur,
-    required this.localDialogOpacity,
-    required this.localDropdownBlur,
-    required this.localDropdownOpacity,
-    required this.onCardBlurChanged,
-    required this.onCardOpacityChanged,
-    required this.onDialogBlurChanged,
-    required this.onDialogOpacityChanged,
-    required this.onDropdownBlurChanged,
-    required this.onDropdownOpacityChanged,
-    required this.onResetDefaults,
-  });
-
-  final AppColors colors;
-  final ThemeProvider theme;
-  final LanguageProvider language;
-  final double localCardBlur;
-  final double localCardOpacity;
-  final double localDialogBlur;
-  final double localDialogOpacity;
-  final double localDropdownBlur;
-  final double localDropdownOpacity;
-  final ValueChanged<double> onCardBlurChanged;
-  final ValueChanged<double> onCardOpacityChanged;
-  final ValueChanged<double> onDialogBlurChanged;
-  final ValueChanged<double> onDialogOpacityChanged;
-  final ValueChanged<double> onDropdownBlurChanged;
-  final ValueChanged<double> onDropdownOpacityChanged;
-  final VoidCallback onResetDefaults;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: BentoCard(
-        colors: colors,
-        blurSigma: localCardBlur,
-        bgOpacity: localCardOpacity,
-        padding: const EdgeInsets.all(16),
-        borderRadius: 14,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.blur_on_rounded,
-                        size: 18,
-                        color: colors.accentPurple,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          language.t('settings_card_header'),
-                          style: TextStyle(
-                            color: colors.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                InkWell(
-                  onTap: onResetDefaults,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    child: Text(
-                      language.t('settings_default'),
-                      style: TextStyle(
-                        color: colors.accentCyan,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _SettingsGlassSlider(
-              label: language.t('settings_card_blur'),
-              value: localCardBlur,
-              min: 0,
-              max: 40,
-              colors: colors,
-              onChanged: onCardBlurChanged,
-            ),
-            _SettingsGlassSlider(
-              label: language.t('settings_card_opacity'),
-              value: localCardOpacity,
-              min: 0.05,
-              max: 1.0,
-              isPercent: true,
-              colors: colors,
-              onChanged: onCardOpacityChanged,
-            ),
-            const SizedBox(height: 6),
-            Divider(color: colors.subCardBorder, height: 1),
-            const SizedBox(height: 6),
-            _SettingsGlassSlider(
-              label: language.t('settings_dialog_blur'),
-              value: localDialogBlur,
-              min: 0,
-              max: 40,
-              colors: colors,
-              onChanged: onDialogBlurChanged,
-            ),
-            _SettingsGlassSlider(
-              label: language.t('settings_dialog_opacity'),
-              value: localDialogOpacity,
-              min: 0.1,
-              max: 1.0,
-              isPercent: true,
-              colors: colors,
-              onChanged: onDialogOpacityChanged,
-            ),
-            const SizedBox(height: 6),
-            Divider(color: colors.subCardBorder, height: 1),
-            const SizedBox(height: 6),
-            _SettingsGlassSlider(
-              label: language.t('settings_dropdown_blur'),
-              value: localDropdownBlur,
-              min: 0,
-              max: 40,
-              colors: colors,
-              onChanged: onDropdownBlurChanged,
-            ),
-            _SettingsGlassSlider(
-              label: language.t('settings_dropdown_opacity'),
-              value: localDropdownOpacity,
-              min: 0.1,
-              max: 1.0,
-              isPercent: true,
-              colors: colors,
-              onChanged: onDropdownOpacityChanged,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsGlassSlider extends StatelessWidget {
-  const _SettingsGlassSlider({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    this.isPercent = false,
-    required this.colors,
-    required this.onChanged,
-  });
-
-  final String label;
-  final double value;
-  final double min;
-  final double max;
-  final bool isPercent;
-  final AppColors colors;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final display = isPercent
-        ? '${(value * 100).round()}%'
-        : '${value.toStringAsFixed(0)}px';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Text(
-                display,
-                style: TextStyle(
-                  color: colors.accentCyan,
-                  fontSize: 11,
-                  fontFamily: 'JetBrains Mono',
-                ),
-              ),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              activeTrackColor: colors.accentColor,
-              inactiveTrackColor: colors.subCardBorder,
-              thumbColor: colors.accentCyan,
-            ),
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              divisions: isPercent ? 19 : 40,
-              onChanged: onChanged,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsUserGuideTab extends StatelessWidget {
-  const _SettingsUserGuideTab({required this.colors, required this.language});
-
-  final AppColors colors;
-  final LanguageProvider language;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildGuideCard(
-            icon: Icons.devices_rounded,
-            accent: colors.accentCyan,
-            title: language.t('guide_start_title', {
-              'version': app_constants.appVersion,
-            }),
-            desc: language.t('guide_start_desc'),
-          ),
-          const SizedBox(height: 10),
-          _buildGuideCard(
-            icon: Icons.terminal_rounded,
-            accent: colors.accentCyan,
-            title: language.t('guide_remote_title', {
-              'version': app_constants.appVersion,
-            }),
-            desc: language.t('guide_remote_desc'),
-          ),
-          const SizedBox(height: 10),
-          _buildGuideCard(
-            icon: Icons.drive_folder_upload_rounded,
-            accent: colors.accentPurple,
-            title: language.t('guide_deploy_title'),
-            desc: language.t('guide_deploy_desc'),
-          ),
-          const SizedBox(height: 10),
-          _buildGuideCard(
-            icon: Icons.help_outline_rounded,
-            accent: colors.accentCyan,
-            title: language.t('guide_data_title', {
-              'version': app_constants.appVersion,
-            }),
-            desc: language.t('guide_data_desc'),
-          ),
-          const SizedBox(height: 10),
-          _buildGuideCard(
-            icon: Icons.keyboard_rounded,
-            accent: colors.accentCyan,
-            title: language.t('guide_shortcuts_title'),
-            desc: language.t('guide_shortcuts_desc'),
-          ),
-          const SizedBox(height: 10),
-          _buildGuideCard(
-            icon: Icons.touch_app_rounded,
-            accent: colors.accentAmber,
-            title: language.t('guide_topbar_title'),
-            desc: language.t('guide_topbar_desc'),
-          ),
-          const SizedBox(height: 10),
-          _buildGuideCard(
-            icon: Icons.speed_rounded,
-            accent: colors.accentEmerald,
-            title: language.t('guide_tier_title'),
-            desc: language.t('guide_tier_desc'),
-          ),
-          const SizedBox(height: 10),
-          _buildGuideCard(
-            icon: Icons.swap_vert_rounded,
-            accent: colors.accentPurple,
-            title: language.t('guide_scroll_title'),
-            desc: language.t('guide_scroll_desc'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGuideCard({
-    required IconData icon,
-    required Color accent,
-    required String title,
-    required String desc,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.subCardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.subCardBorder),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: accent, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  desc,
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 12,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsAboutTab extends StatelessWidget {
-  const _SettingsAboutTab({
-    required this.colors,
-    required this.theme,
-    required this.language,
-    required this.appVersion,
-    required this.isDebug,
-  });
-
-  final AppColors colors;
-  final ThemeProvider theme;
-  final LanguageProvider language;
-  final String appVersion;
-  final bool isDebug;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Branding Card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colors.subCardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: colors.accentColor.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [colors.accentColor, colors.accentCyan],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colors.primaryGlow.withValues(alpha: 0.3),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'JA',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            language.t('about_app_name'),
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          PillBadge(
-                            label: isDebug ? 'DEBUG' : 'RELEASE',
-                            color: isDebug
-                                ? colors.accentAmber
-                                : colors.accentEmerald,
-                            bg:
-                                (isDebug
-                                        ? colors.accentAmber
-                                        : colors.accentEmerald)
-                                    .withValues(alpha: 0.12),
-                            border:
-                                (isDebug
-                                        ? colors.accentAmber
-                                        : colors.accentEmerald)
-                                    .withValues(alpha: 0.3),
-                            fontSize: 9.5,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'v$appVersion • Release 2026-09-15',
-                        style: TextStyle(
-                          color: colors.textMuted,
-                          fontSize: 11,
-                          fontFamily: 'JetBrains Mono',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            language.t('about_app_desc'),
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 12,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // System Runtime Card
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colors.subCardBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.subCardBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  language.t('about_sys_title'),
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                _buildInfoRow(
-                  'Hệ điều hành / OS',
-                  Platform.operatingSystemVersion,
-                  colors,
-                ),
-                _buildInfoRow('Số nhân CPU', '${theme.cpuCores} Cores', colors),
-                _buildInfoRow(
-                  'Điểm phần cứng',
-                  '${theme.hardwareScore}/100',
-                  colors,
-                ),
-                _buildInfoRow(
-                  'Cấu hình đồ họa',
-                  '${theme.effectiveTier.label} (${theme.effectiveTier.desc})',
-                  colors,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          // Developer & License Card
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colors.subCardBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: colors.subCardBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  language.t('about_dev_title'),
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                _buildInfoRow(
-                  'Tác giả / Author',
-                  'Johnny / JA-Tech System',
-                  colors,
-                ),
-                _buildInfoRow(
-                  'Bản quyền / License',
-                  'MIT License (Open Source)',
-                  colors,
-                ),
-                Wrap(
-                  children: [
-                    TextButton(
-                      onPressed: () => _openProjectLink(
-                        context,
-                        'https://jatechvn.github.io/',
-                      ),
-                      child: const Text('jatechvn.github.io'),
-                    ),
-                    TextButton(
-                      onPressed: () => _openProjectLink(
-                        context,
-                        'https://github.com/jatechvn/JA_Remote',
-                      ),
-                      child: const Text('GitHub / JA_Remote'),
-                    ),
-                  ],
-                ),
-                _buildInfoRow(
-                  'Bộ quy chuẩn',
-                  'flutter-app-blueprint v1.0',
-                  colors,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openProjectLink(BuildContext context, String url) async {
-    try {
-      await Process.start('explorer.exe', [url]);
-    } catch (_) {
-      if (!context.mounted) return;
-      showAppToast(
-        context,
-        colors: colors,
-        message: url,
-        icon: Icons.link_rounded,
-      );
-    }
-  }
-
-  Widget _buildInfoRow(String label, String value, AppColors colors) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.5),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              label,
-              style: TextStyle(color: colors.textMuted, fontSize: 11),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'JetBrains Mono',
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsMacOuiTab extends StatefulWidget {
-  final AppColors colors;
-  final LanguageProvider language;
-
-  const _SettingsMacOuiTab({required this.colors, required this.language});
-
-  @override
-  State<_SettingsMacOuiTab> createState() => _SettingsMacOuiTabState();
-}
-
-class _SettingsMacOuiTabState extends State<_SettingsMacOuiTab> {
-  final _prefixController = TextEditingController();
-  final _vendorController = TextEditingController();
-  bool _isLoading = false;
-
-  @override
-  void dispose() {
-    _prefixController.dispose();
-    _vendorController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleSave() async {
-    final prefix = _prefixController.text.trim();
-    final vendor = _vendorController.text.trim();
-
-    final cleanedOui = MacOuiResolver.cleanOUI(prefix);
-    if (cleanedOui == null) {
-      showAppToast(
-        context,
-        colors: widget.colors,
-        message: widget.language.t('oui_invalid_prefix'),
-        icon: Icons.warning_rounded,
-        accentColor: widget.colors.accentAmber,
-      );
-      return;
-    }
-
-    if (vendor.isEmpty) {
-      showAppToast(
-        context,
-        colors: widget.colors,
-        message: widget.language.t('oui_vendor_required'),
-        icon: Icons.warning_rounded,
-        accentColor: widget.colors.accentAmber,
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-    await MacOuiResolver.setCustomMapping(cleanedOui, vendor);
-    _prefixController.clear();
-    _vendorController.clear();
-    if (mounted) {
-      setState(() => _isLoading = false);
-      showAppToast(
-        context,
-        colors: widget.colors,
-        message: widget.language.t('oui_toast_saved', {
-          'oui': cleanedOui,
-          'vendor': vendor,
-        }),
-        icon: Icons.check_circle_rounded,
-        accentColor: widget.colors.accentEmerald,
-      );
-    }
-  }
-
-  Future<void> _handleDelete(String oui) async {
-    setState(() => _isLoading = true);
-    await MacOuiResolver.removeCustomMapping(oui);
-    if (mounted) {
-      setState(() => _isLoading = false);
-      showAppToast(
-        context,
-        colors: widget.colors,
-        message: widget.language.t('oui_toast_deleted', {'oui': oui}),
-        icon: Icons.delete_outline_rounded,
-        accentColor: widget.colors.accentRose,
-      );
-    }
-  }
-
-  Future<void> _handleReload() async {
-    setState(() => _isLoading = true);
-    final count = await MacOuiResolver.loadCustomMappings();
-    if (mounted) {
-      setState(() => _isLoading = false);
-      showAppToast(
-        context,
-        colors: widget.colors,
-        message: widget.language.t('oui_toast_reloaded', {
-          'count': count.toString(),
-        }),
-        icon: Icons.refresh_rounded,
-        accentColor: widget.colors.accentCyan,
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = widget.colors;
-    final lang = widget.language;
-    final customEntries = MacOuiResolver.customMap.entries.toList();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. Header & Actions Bento Card
-          BentoCard(
-            colors: colors,
-            padding: const EdgeInsets.all(14),
-            borderRadius: 12,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: colors.accentCyan.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.memory_rounded,
-                        color: colors.accentCyan,
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        lang.t('oui_header_title'),
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  lang.t('oui_header_desc'),
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 11.5,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _buildActionButton(
-                      icon: Icons.description_outlined,
-                      label: lang.t('oui_btn_open_file'),
-                      color: colors.accentCyan,
-                      onTap: () => MacOuiResolver.openConfigFile(),
-                    ),
-                    _buildActionButton(
-                      icon: Icons.folder_open_rounded,
-                      label: lang.t('oui_btn_open_folder'),
-                      color: colors.accentEmerald,
-                      onTap: () => MacOuiResolver.openConfigFolder(),
-                    ),
-                    _buildActionButton(
-                      icon: Icons.refresh_rounded,
-                      label: lang.t('oui_btn_reload'),
-                      color: colors.accentAmber,
-                      onTap: _handleReload,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 2. Add New OUI Mapping Card
-          BentoCard(
-            colors: colors,
-            padding: const EdgeInsets.all(14),
-            borderRadius: 12,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  lang.t('oui_input_prefix_label'),
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 4,
-                      child: TextField(
-                        controller: _prefixController,
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontSize: 12.5,
-                          fontFamily: 'JetBrains Mono',
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: InputDecoration(
-                          hintText: lang.t('oui_input_prefix_hint'),
-                          hintStyle: TextStyle(
-                            color: colors.textMuted.withValues(alpha: 0.6),
-                            fontSize: 11.5,
-                          ),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 9,
-                          ),
-                          filled: true,
-                          fillColor: colors.subCardBg,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.subCardBorder),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.subCardBorder),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.accentCyan),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 6,
-                      child: TextField(
-                        controller: _vendorController,
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: lang.t('oui_input_vendor_hint'),
-                          hintStyle: TextStyle(
-                            color: colors.textMuted.withValues(alpha: 0.6),
-                            fontSize: 11.5,
-                          ),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 9,
-                          ),
-                          filled: true,
-                          fillColor: colors.subCardBg,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.subCardBorder),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.subCardBorder),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: colors.accentCyan),
-                          ),
-                        ),
-                        onSubmitted: (_) => _handleSave(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GlowingActionButton(
-                      height: 36,
-                      colors: colors,
-                      icon: Icons.add_rounded,
-                      label: lang.t('oui_btn_save'),
-                      onPressed: _isLoading ? null : _handleSave,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 3. Custom Entries List Card
-          BentoCard(
-            colors: colors,
-            padding: const EdgeInsets.all(14),
-            borderRadius: 12,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      lang.t('oui_custom_list_title', {
-                        'count': customEntries.length.toString(),
-                      }),
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      lang.t('oui_status_summary', {
-                        'custom': customEntries.length.toString(),
-                        'builtin': MacOuiResolver.totalBuiltInCount.toString(),
-                      }),
-                      style: TextStyle(
-                        color: colors.textMuted,
-                        fontSize: 11,
-                        fontFamily: 'JetBrains Mono',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                if (customEntries.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 18,
-                      horizontal: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.subCardBg.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: colors.subCardBorder.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        lang.t('oui_empty_custom', {
-                          'count': MacOuiResolver.totalBuiltInCount.toString(),
-                        }),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 11.5,
-                          height: 1.45,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: customEntries.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final item = customEntries[index];
-                      final formattedOui =
-                          '${item.key.substring(0, 2)}:${item.key.substring(2, 4)}:${item.key.substring(4, 6)}';
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.subCardBg,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: colors.subCardBorder),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: colors.accentCyan.withValues(
-                                  alpha: 0.12,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: colors.accentCyan.withValues(
-                                    alpha: 0.35,
-                                  ),
-                                ),
-                              ),
-                              child: Text(
-                                formattedOui,
-                                style: TextStyle(
-                                  color: colors.accentCyan,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'JetBrains Mono',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 12,
-                              color: colors.textMuted,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                item.value,
-                                style: TextStyle(
-                                  color: colors.textPrimary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.delete_outline_rounded,
-                                size: 16,
-                                color: colors.accentRose,
-                              ),
-                              tooltip: 'Delete',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 28,
-                                minHeight: 28,
-                              ),
-                              onPressed: () => _handleDelete(item.key),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    final colors = widget.colors;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsOtaUpdateTab extends StatefulWidget {
-  final AppColors colors;
-  final LanguageProvider language;
-
-  const _SettingsOtaUpdateTab({required this.colors, required this.language});
-
-  @override
-  State<_SettingsOtaUpdateTab> createState() => _SettingsOtaUpdateTabState();
-}
-
-class _SettingsOtaUpdateTabState extends State<_SettingsOtaUpdateTab> {
-  final OtaUpdateService _otaService = OtaUpdateService();
-  late TextEditingController _serverPathController;
-  late TextEditingController _usernameController;
-  late TextEditingController _passwordController;
-  late String _checkInterval;
-
-  bool _isTestingConnection = false;
-  String? _testConnectionResult;
-  bool _testConnectionSuccess = false;
-
-  bool _isCheckingUpdates = false;
-  UpdateCheckResult? _manualCheckResult;
-
-  @override
-  void initState() {
-    super.initState();
-    final cfg = _otaService.config;
-    _serverPathController = TextEditingController(text: cfg.serverPath);
-    _usernameController = TextEditingController(text: cfg.username);
-    _passwordController = TextEditingController(text: cfg.password);
-    _checkInterval = cfg.checkInterval;
-  }
-
-  @override
-  void dispose() {
-    _serverPathController.dispose();
-    _usernameController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveCurrentConfig() async {
-    final updated = _otaService.config.copyWith(
-      serverPath: _serverPathController.text.trim(),
-      username: _usernameController.text.trim(),
-      password: _passwordController.text,
-      checkInterval: _checkInterval,
-    );
-    await _otaService.saveExternalConfigFile(updated);
-  }
-
-  Future<void> _testConnection() async {
-    setState(() {
-      _isTestingConnection = true;
-      _testConnectionResult = null;
-    });
-
-    await _saveCurrentConfig();
-
-    final success = await _otaService.connectSmbShare(
-      path: _serverPathController.text.trim(),
-      username: _usernameController.text.trim(),
-      password: _passwordController.text,
-    );
-
-    if (mounted) {
-      setState(() {
-        _isTestingConnection = false;
-        _testConnectionSuccess = success;
-        _testConnectionResult = success
-            ? widget.language.t('ota_connection_ok')
-            : widget.language.t('ota_connection_failed');
-      });
-    }
-  }
-
-  Future<void> _checkForUpdatesManually() async {
-    setState(() {
-      _isCheckingUpdates = true;
-      _manualCheckResult = null;
-    });
-
-    await _saveCurrentConfig();
-
-    final result = await _otaService.checkForUpdates(
-      overrideServerPath: _serverPathController.text.trim(),
-    );
-
-    if (mounted) {
-      setState(() {
-        _isCheckingUpdates = false;
-        _manualCheckResult = result;
-      });
-
-      if (result.hasUpdate && result.packageInfo != null) {
-        showGlassUpdateDialog(
-          context: context,
-          packageInfo: result.packageInfo!,
-        );
-      }
-    }
-  }
-
-  void _openConfigFolder() {
-    final file = _otaService.getConfigFile();
-    final dir = file.parent;
-    if (Platform.isWindows) {
-      Process.run('explorer.exe', [dir.path]);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = widget.colors;
-    final lang = widget.language;
-    final cfg = _otaService.config;
-
-    final lastCheckStr = cfg.lastCheckTime != null
-        ? '${cfg.lastCheckTime!.hour.toString().padLeft(2, '0')}:${cfg.lastCheckTime!.minute.toString().padLeft(2, '0')} ${cfg.lastCheckTime!.day.toString().padLeft(2, '0')}/${cfg.lastCheckTime!.month.toString().padLeft(2, '0')}/${cfg.lastCheckTime!.year}'
-        : lang.t('ota_never_checked');
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 1. Current Version & Quick Check Card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colors.subCardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: colors.subCardBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [colors.accentCyan, colors.accentColor],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.system_update_alt_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${lang.t('ota_current_version')}: v${app_constants.appVersion}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '${lang.t('ota_last_check')}: $lastCheckStr',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: colors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: _isCheckingUpdates
-                          ? null
-                          : _checkForUpdatesManually,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: colors.accentCyan,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                      ),
-                      icon: _isCheckingUpdates
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                          : const Icon(Icons.refresh_rounded, size: 16),
-                      label: Text(
-                        _isCheckingUpdates
-                            ? lang.t('ota_checking')
-                            : lang.t('ota_check_now'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Result banner if checked
-                if (_manualCheckResult != null) ...[
-                  const SizedBox(height: 12),
-                  if (_manualCheckResult!.hasUpdate) ...[
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colors.accentEmerald.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: colors.accentEmerald.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.check_circle_rounded,
-                            size: 16,
-                            color: colors.accentEmerald,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              lang.t('ota_update_available', {
-                                'version':
-                                    _manualCheckResult
-                                        ?.packageInfo
-                                        ?.version
-                                        .displayVersion ??
-                                    '',
-                              }),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: colors.accentEmerald,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              if (_manualCheckResult?.packageInfo != null) {
-                                showGlassUpdateDialog(
-                                  context: context,
-                                  packageInfo: _manualCheckResult!.packageInfo!,
-                                );
-                              }
-                            },
-                            child: Text(
-                              lang.t('ota_btn_update_now'),
-                              style: TextStyle(
-                                color: colors.accentEmerald,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else if (_manualCheckResult!.isConnectionSuccess) ...[
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colors.accentCyan.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: colors.accentCyan.withValues(alpha: 0.30),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline_rounded,
-                            size: 16,
-                            color: colors.accentCyan,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              lang.t('ota_up_to_date'),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.accentCyan,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else ...[
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colors.accentRose.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: colors.accentRose.withValues(alpha: 0.30),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            size: 16,
-                            color: colors.accentRose,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _manualCheckResult!.errorMessage ??
-                                  lang.t('ota_connection_failed'),
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: colors.accentRose,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // 2. Server Share Configuration Card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colors.subCardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: colors.subCardBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  lang.t('ota_server_path'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _serverPathController,
-                  onChanged: (_) => _saveCurrentConfig(),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: colors.textPrimary,
-                    fontFamily: 'JetBrains Mono',
-                  ),
-                  decoration: InputDecoration(
-                    hintText: lang.t('ota_server_path_hint'),
-                    hintStyle: TextStyle(
-                      fontSize: 11.5,
-                      color: colors.textMuted.withValues(alpha: 0.6),
-                    ),
-                    filled: true,
-                    fillColor: colors.cardHoverBg.withValues(alpha: 0.25),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(9),
-                      borderSide: BorderSide(color: colors.subCardBorder),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(9),
-                      borderSide: BorderSide(color: colors.subCardBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(9),
-                      borderSide: BorderSide(color: colors.accentCyan),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Username and Password in 2 columns
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            lang.t('ota_username'),
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          TextField(
-                            controller: _usernameController,
-                            onChanged: (_) => _saveCurrentConfig(),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colors.textPrimary,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'user',
-                              filled: true,
-                              fillColor: colors.cardHoverBg.withValues(
-                                alpha: 0.25,
-                              ),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: colors.subCardBorder,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: colors.subCardBorder,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: colors.accentCyan,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            lang.t('ota_password'),
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          TextField(
-                            controller: _passwordController,
-                            obscureText: true,
-                            onChanged: (_) => _saveCurrentConfig(),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colors.textPrimary,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: '••••••',
-                              filled: true,
-                              fillColor: colors.cardHoverBg.withValues(
-                                alpha: 0.25,
-                              ),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: colors.subCardBorder,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: colors.subCardBorder,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: colors.accentCyan,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Check Interval Selector
-                Row(
-                  children: [
-                    Text(
-                      lang.t('ota_interval'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: colors.cardHoverBg.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: colors.subCardBorder),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _checkInterval,
-                          dropdownColor: colors.cardBg,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colors.textPrimary,
-                          ),
-                          items: [
-                            DropdownMenuItem(
-                              value: 'daily',
-                              child: Text(lang.t('ota_interval_daily')),
-                            ),
-                            DropdownMenuItem(
-                              value: 'weekly',
-                              child: Text(lang.t('ota_interval_weekly')),
-                            ),
-                            DropdownMenuItem(
-                              value: 'monthly',
-                              child: Text(lang.t('ota_interval_monthly')),
-                            ),
-                            DropdownMenuItem(
-                              value: 'off',
-                              child: Text(lang.t('ota_interval_off')),
-                            ),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _checkInterval = val);
-                              _saveCurrentConfig();
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Actions: Test Connection & Open Config Folder
-                Row(
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _isTestingConnection ? null : _testConnection,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colors.accentCyan,
-                        side: BorderSide(
-                          color: colors.accentCyan.withValues(alpha: 0.6),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: _isTestingConnection
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.wifi_find_rounded, size: 15),
-                      label: Text(
-                        _isTestingConnection
-                            ? lang.t('ota_testing_connection')
-                            : lang.t('ota_test_connection'),
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    OutlinedButton.icon(
-                      onPressed: _openConfigFolder,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colors.textSecondary,
-                        side: BorderSide(color: colors.subCardBorder),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.folder_open_rounded, size: 15),
-                      label: Text(
-                        lang.t('ota_open_config_dir'),
-                        style: const TextStyle(fontSize: 11.5),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Connection test result
-                if (_testConnectionResult != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(
-                        _testConnectionSuccess
-                            ? Icons.check_circle_rounded
-                            : Icons.cancel_rounded,
-                        size: 15,
-                        color: _testConnectionSuccess
-                            ? colors.accentEmerald
-                            : colors.accentRose,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _testConnectionResult!,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: _testConnectionSuccess
-                                ? colors.accentEmerald
-                                : colors.accentRose,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

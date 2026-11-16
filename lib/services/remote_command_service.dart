@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:dartssh2/dartssh2.dart';
+import 'package:path/path.dart' as p;
 import '../core/process/process_runner.dart';
 import '../core/utils/command_variable_resolver.dart';
 import '../data/models/managed_device.dart';
@@ -35,6 +37,37 @@ class RemoteCommandService {
     connectSsh,
   }) : _connectSsh = connectSsh ?? _openSsh;
 
+  /// Safely loads unencrypted OpenSSH/PEM private keys from the local `.ssh` directory.
+  static List<SSHKeyPair> loadLocalSshIdentities({Directory? sshDir}) {
+    final dir = sshDir ?? _defaultSshDir();
+    if (dir == null || !dir.existsSync()) return const [];
+
+    const candidateNames = [
+      'id_ed25519',
+      'id_ed25519_ubuntu',
+      'id_rsa',
+      'id_ecdsa',
+    ];
+    final pairs = <SSHKeyPair>[];
+    for (final name in candidateNames) {
+      final file = File(p.join(dir.path, name));
+      try {
+        if (!file.existsSync() || file.lengthSync() > 32768) continue;
+        final pem = file.readAsStringSync();
+        if (SSHKeyPair.isEncryptedPem(pem)) continue;
+        pairs.addAll(SSHKeyPair.fromPem(pem));
+      } catch (_) {}
+    }
+    return pairs;
+  }
+
+  static Directory? _defaultSshDir() {
+    final home =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
+    if (home == null || home.trim().isEmpty) return null;
+    return Directory(p.join(home, '.ssh'));
+  }
+
   static Future<SSHClient> _openSsh(
     ManagedDevice device,
     String username,
@@ -46,9 +79,11 @@ class RemoteCommandService {
       device.sshPort,
       timeout: timeout,
     );
+    final identities = loadLocalSshIdentities();
     return SSHClient(
       socket,
       username: username,
+      identities: identities.isEmpty ? null : identities,
       onPasswordRequest: () => password,
     );
   }

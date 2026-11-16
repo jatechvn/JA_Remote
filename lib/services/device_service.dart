@@ -5,6 +5,7 @@ import '../core/network/ping_engine.dart';
 import '../data/models/managed_device.dart';
 import '../data/repositories/device_repository.dart';
 import '../core/utils/everything_search_matcher.dart';
+import 'app_power_manager.dart';
 import 'power_service.dart';
 
 /// Central state manager for devices, filtering, selection, and periodic status polling.
@@ -22,6 +23,8 @@ class DeviceService extends ChangeNotifier {
   bool _sortAscending = true;
   bool _isLoading = false;
   bool _isPolling = true;
+  bool _isRefreshing = false;
+  bool _hasPendingUiUpdate = false;
 
   Timer? _pollingTimer;
 
@@ -34,6 +37,8 @@ class DeviceService extends ChangeNotifier {
   bool get sortAscending => _sortAscending;
   bool get isLoading => _isLoading;
   bool get isPolling => _isPolling;
+  bool get isRefreshing => _isRefreshing;
+  bool get hasPendingUiUpdate => _hasPendingUiUpdate;
 
   int get onlineCount => _devices.where((d) => d.online).length;
   int get totalCount => _devices.length;
@@ -71,7 +76,27 @@ class DeviceService extends ChangeNotifier {
   }
 
   DeviceService({bool initialize = true}) {
+    AppPowerManager.instance.indicatorsAnimationNotifier.addListener(
+      _onPowerRenderingChanged,
+    );
     if (initialize) _initialize();
+  }
+
+  void _onPowerRenderingChanged() {
+    if (AppPowerManager.instance.shouldAnimateIndicators &&
+        _hasPendingUiUpdate) {
+      _hasPendingUiUpdate = false;
+      notifyListeners();
+    }
+  }
+
+  void _notifyUiOrDefer() {
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      _hasPendingUiUpdate = false;
+      notifyListeners();
+    } else {
+      _hasPendingUiUpdate = true;
+    }
   }
 
   Future<void> _initialize() async {
@@ -92,7 +117,7 @@ class DeviceService extends ChangeNotifier {
   void _startPolling() {
     _pollingTimer?.cancel();
     _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (_isPolling && _devices.isNotEmpty) {
+      if (_isPolling && _devices.isNotEmpty && !_isRefreshing) {
         refreshAllStatus();
       }
     });
@@ -103,27 +128,50 @@ class DeviceService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Pings all registered devices to refresh online/offline & latency state
+  /// Pings all registered devices to refresh online/offline & latency state.
+  /// Coalesces UI notifications to once per batch and defers UI rebuilds while
+  /// the window is unfocused or minimized. Only writes `devices.json` when at
+  /// least one device's `online` status actually changed.
   Future<void> refreshAllStatus() async {
+    if (_isRefreshing) return;
     final ips = _devices.map((d) => d.ip).toList();
     if (ips.isEmpty) return;
 
-    final sub = PingEngine.pingBatch(ips, maxConcurrent: 10, timeoutMs: 350)
-        .listen((res) {
-          final index = _devices.indexWhere((d) => d.ip == res.ip);
-          if (index >= 0) {
-            final old = _devices[index];
-            _devices[index] = old.copyWith(
-              online: res.isOnline,
-              pingMs: res.latencyMs,
-              lastSeen: res.isOnline ? DateTime.now() : old.lastSeen,
-            );
-            notifyListeners();
-          }
-        });
+    _isRefreshing = true;
+    bool didOnlineStatusChange = false;
+    bool didAnyMetricChange = false;
 
-    await sub.asFuture();
-    await _repo.saveAll(_devices);
+    try {
+      final sub = PingEngine.pingBatch(ips, maxConcurrent: 10, timeoutMs: 350)
+          .listen((res) {
+            final index = _devices.indexWhere((d) => d.ip == res.ip);
+            if (index >= 0) {
+              final old = _devices[index];
+              if (old.online != res.isOnline) {
+                didOnlineStatusChange = true;
+              }
+              if (old.online != res.isOnline || old.pingMs != res.latencyMs) {
+                didAnyMetricChange = true;
+              }
+              _devices[index] = old.copyWith(
+                online: res.isOnline,
+                pingMs: res.latencyMs,
+                lastSeen: res.isOnline ? DateTime.now() : old.lastSeen,
+              );
+            }
+          });
+
+      await sub.asFuture();
+
+      if (didAnyMetricChange) {
+        _notifyUiOrDefer();
+      }
+      if (didOnlineStatusChange) {
+        await _repo.saveAll(_devices);
+      }
+    } finally {
+      _isRefreshing = false;
+    }
   }
 
   // --- Search & Filtering ---
@@ -175,6 +223,15 @@ class DeviceService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Replaces the current selection with the specified device [ids].
+  void selectByIds(Iterable<String> ids) {
+    final validIds = _devices.map((d) => d.id).toSet();
+    _selectedIds
+      ..clear()
+      ..addAll(ids.where(validIds.contains));
+    notifyListeners();
+  }
+
   void deselectAll() {
     _selectedIds.clear();
     notifyListeners();
@@ -207,6 +264,35 @@ class DeviceService extends ChangeNotifier {
 
   Future<void> updateDevice(ManagedDevice device) async {
     await _repo.upsert(device);
+    _devices = await _repo.loadDevices();
+    notifyListeners();
+  }
+
+  /// Updates a device's IP (and optional MAC / hostname) discovered by the IP Drift Scanner.
+  Future<void> applyDiscoveredIpUpdate(
+    String deviceId,
+    String newIp, {
+    String? newMac,
+    String? discoveredHostname,
+  }) async {
+    final idx = _devices.indexWhere((d) => d.id == deviceId);
+    if (idx < 0) return;
+    final current = _devices[idx];
+    final updated = current.copyWith(
+      ip: newIp.trim(),
+      mac: (newMac != null && newMac.trim().isNotEmpty)
+          ? newMac.trim()
+          : current.mac,
+      hostname:
+          (discoveredHostname != null &&
+              discoveredHostname.trim().isNotEmpty &&
+              current.hostname.trim().isEmpty)
+          ? discoveredHostname.trim()
+          : current.hostname,
+      online: true,
+      lastSeen: DateTime.now(),
+    );
+    await _repo.upsert(updated);
     _devices = await _repo.loadDevices();
     notifyListeners();
   }
@@ -263,8 +349,22 @@ class DeviceService extends ChangeNotifier {
     }
   }
 
+  @visibleForTesting
+  void setDevicesForTesting(List<ManagedDevice> devices) {
+    _devices = List<ManagedDevice>.of(devices);
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void simulateDeferredMetricChangeForTesting() {
+    _notifyUiOrDefer();
+  }
+
   @override
   void dispose() {
+    AppPowerManager.instance.indicatorsAnimationNotifier.removeListener(
+      _onPowerRenderingChanged,
+    );
     _pollingTimer?.cancel();
     super.dispose();
   }

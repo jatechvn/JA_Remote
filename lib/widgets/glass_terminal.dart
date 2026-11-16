@@ -25,6 +25,10 @@ enum TerminalLineType {
 
 /// Single record in the terminal stream.
 class TerminalLine {
+  static final RegExp _leadingTimestampRegex = RegExp(
+    r'^\[\d{2}:\d{2}:\d{2}\]\s*',
+  );
+
   final String text;
   final TerminalLineType type;
   final DateTime timestamp;
@@ -34,6 +38,39 @@ class TerminalLine {
     this.type = TerminalLineType.output,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
+
+  /// Strips duplicate leading `[HH:mm:ss]` prefixes and auto-detects semantic
+  /// [TerminalLineType] when [type] is [TerminalLineType.output].
+  factory TerminalLine.fromExternal(
+    String rawText, {
+    TerminalLineType type = TerminalLineType.output,
+    DateTime? timestamp,
+  }) {
+    final cleaned = rawText.replaceFirst(_leadingTimestampRegex, '');
+    var resolvedType = type;
+    if (resolvedType == TerminalLineType.output) {
+      final lower = cleaned.toLowerCase();
+      if (cleaned.contains('[✓]') ||
+          lower.contains('hoàn tất') ||
+          lower.contains('thành công')) {
+        resolvedType = TerminalLineType.success;
+      } else if (cleaned.contains('[✗]') ||
+          lower.contains('thất bại') ||
+          lower.contains('lỗi:') ||
+          lower.contains('error:')) {
+        resolvedType = TerminalLineType.error;
+      } else if (cleaned.contains('[!]') ||
+          lower.contains('cảnh báo') ||
+          lower.contains('đã hủy')) {
+        resolvedType = TerminalLineType.warn;
+      } else if (cleaned.contains('[BẮT ĐẦU]') ||
+          cleaned.contains('[THỬ LẠI]') ||
+          cleaned.contains('[HOOK]')) {
+        resolvedType = TerminalLineType.info;
+      }
+    }
+    return TerminalLine(cleaned, type: resolvedType, timestamp: timestamp);
+  }
 }
 
 /// Controller to manipulate terminal output stream from external callers.
@@ -361,7 +398,7 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
   }) {
     if (!mounted) return;
     setState(() {
-      _lines.add(TerminalLine(text, type: type));
+      _lines.add(TerminalLine.fromExternal(text, type: type));
     });
     _scrollToBottom();
   }
@@ -373,7 +410,7 @@ class _GlassTerminalPanelState extends State<GlassTerminalPanel> {
     if (!mounted) return;
     setState(() {
       for (final line in lines) {
-        _lines.add(TerminalLine(line, type: type));
+        _lines.add(TerminalLine.fromExternal(line, type: type));
       }
     });
     _scrollToBottom();

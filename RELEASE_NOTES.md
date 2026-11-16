@@ -1,12 +1,15 @@
-TAG=v1.3.2
-TITLE=JA Remote v1.3.2 — Windows Executable Multi-Resolution App Icon & Packaging Refresh
+TAG=v1.4.0
+TITLE=JA Remote v1.4.0 — 4-Tier Power Optimizer, 4-Layer WoL Inspector & Smart IP Drift Auditor
 BODY=
-## JA Remote v1.3.2 — Windows Executable Multi-Resolution App Icon & Packaging Refresh
+## JA Remote v1.4.0 — 4-Tier Power Optimizer, 4-Layer WoL Inspector & Smart IP Drift Auditor
 
-- **Biểu tượng Windows chuẩn Multi-Resolution:** Tích hợp bộ icon chuẩn Windows với 7 tầng độ phân giải (`256x256, 128x128, 64x64, 48x48, 32x32, 24x24, 16x16` 32-bit ARGB PNG) cho file thực thi `ja_remote.exe`.
-- **Tương thích toàn diện Windows Shell:** Icon hiển thị sắc nét trên Windows Explorer, thanh tác vụ Taskbar, khay chuyển cửa sổ Alt+Tab, thanh tiêu đề ứng dụng và phím tắt Desktop/Start Menu.
-- **Đồng bộ tài liệu & Metadata:** Cập nhật phiên bản 1.3.2+7 trên toàn bộ hệ thống (Runner.rc, pubspec.yaml, constants.dart, ABOUT.txt, config_sample.json, install.bat, build.bat, USERGUIDE.md, README.md).
+- **Bộ tối ưu năng lượng 4 tầng & Chế độ ngủ rảnh tay (4-Tier Power Optimizer):** Tích hợp `AppPowerManager` quản lý 4 trạng thái cửa sổ (Active, Inactive, Unfocused, Hidden/Minimized) kết hợp chế độ Idle Sleep Mode (12s/30s/60s) tự động ngắt render loop, giảm thiểu tối đa mức tiêu thụ CPU & GPU trên máy trạm Windows Desktop.
+- **Trình chẩn đoán & Tối ưu Wake-on-LAN 4 tầng (4-Layer WoL Inspector & Auto-Fix):** Kiểm tra toàn diện BIOS/ACPI, Driver NIC & EEE, tính bền vững reboot/shutdown và Fast Startup; tự động sửa qua UAC, WinRM an toàn không rớt mạng hoặc SSH + sudo offline cho Linux.
+- **Trình rà soát lệch IP & Xung đột MAC (Smart IP Drift & MAC Conflict Auditor):** Tự động phát hiện máy trạm đổi IP (DHCP drift) hoặc trùng MAC qua ICMP Ping, ARP cache, RDP X.509 CN và NetBIOS; hỗ trợ cập nhật IP 1-click.
+- **Native Windows Title & PE Metadata:** Đảm bảo cửa sổ mang tên chính quy trên Taskbar và khay chuyển Alt+Tab.
+- **Tái cấu trúc module giao diện Cài đặt:** Tách nhỏ module cài đặt thành các part files trực quan, nâng cao tính bảo trì.
+- **Đồng bộ tài liệu & Metadata:** Cập nhật phiên bản 1.4.0+8 trên toàn bộ hệ thống (Runner.rc, pubspec.yaml, constants.dart, ABOUT.txt, config_sample.json, install.bat, build.bat, USERGUIDE.md, README.md).
 
 ### Cài đặt
 - **Cài đặt tiện lợi (Khuyên dùng):** Chạy `install.bat` (hoặc `install.bat /silent`) để cài ứng dụng vào máy trạm không cần quyền Admin.
-- **Sử dụng Portable:** Giải nén toàn bộ `JA_Remote_v1.3.2_Windows_x64.zip` và chạy trực tiếp `ja_remote.exe`. Xem `USERGUIDE.md` trong gói.
+- **Sử dụng Portable:** Giải nén toàn bộ `JA_Remote_v1.4.0_Windows_x64.zip` và chạy trực tiếp `ja_remote.exe`. Xem `USERGUIDE.md` trong gói.

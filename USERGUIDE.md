@@ -1,4 +1,4 @@
-# Hướng dẫn sử dụng JA Remote v1.3.2
+# Hướng dẫn sử dụng JA Remote v1.4.0
 
 ## Cài đặt ứng dụng
 
@@ -9,7 +9,7 @@
 - Đăng ký mục gỡ cài đặt chính quy trong Windows Settings & Control Panel. Khi muốn gỡ bỏ, bạn có thể gỡ từ Control Panel hoặc chạy `uninstall.bat`.
 
 ### 2. Sử dụng bản Portable
-- Giải nén toàn bộ `JA_Remote_v1.3.2_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy trực tiếp `ja_remote.exe`.
+- Giải nén toàn bộ `JA_Remote_v1.4.0_Windows_x64.zip`, giữ nguyên thư mục `data/` và các DLL cạnh `ja_remote.exe`, rồi chạy trực tiếp `ja_remote.exe`.
 - Chạy `debug.bat` khi cần bật chế độ debug ghi log chẩn đoán và hiển thị badge thời gian build. Bản phát hành dành cho Windows x64.
 
 ## Thiết bị và quét LAN
@@ -20,11 +20,12 @@
 4. Con trỏ soạn thảo luôn tự động sẵn sàng tại ô tìm kiếm khi chuyển sang các tab Thiết bị, Quét LAN hoặc Nhật ký.
 5. Chọn checkbox của các máy cần thao tác; kiểm tra số lượng và danh sách đích trước tác vụ hàng loạt. **Ctrl+Shift+A** cộng thêm các máy đang lọc vào lựa chọn trước đó, không loại các máy đã chọn đang bị ẩn.
 6. **F5** cập nhật Ping; có thể tạm dừng Auto-Ping bằng nút trên thanh công cụ.
+7. **Rà soát lệch IP & Xung đột MAC (Smart IP Drift Auditor):** Nhấn **Ctrl+K** gõ *drift* hoặc bấm biểu tượng quét lệch IP trên thanh công cụ tab Thiết bị để đối soát danh bạ với mạng LAN thực tế qua ICMP Ping, bảng ARP, RDP X.509 CN (cổng 3389) và NetBIOS NBSTAT (UDP 137). Hệ thống tự động phát hiện máy trạm đổi IP do DHCP hoặc xung đột MAC và hỗ trợ cập nhật IP mới 1-click.
 
 ## Remote và thực thi lệnh
 
 - **RDP, C$ và Computer Management:** mở các công cụ quản trị Windows tương ứng.
-- **WOL:** cần MAC hợp lệ và cấu hình BIOS/NIC cho phép Wake-on-LAN.
+- **WOL & Check/Fix WoL (4 tầng):** cần MAC hợp lệ và cấu hình BIOS/NIC/OS chuẩn cho Wake-on-LAN. Bạn có thể mở trình **Kiểm tra & Tối ưu Wake-on-LAN** từ nút nguồn trên thanh công cụ **Thiết bị**, thanh thao tác hàng loạt (**Check / Fix WoL**), menu `...` của từng máy, hoặc nhấn `Ctrl+K` gõ *wol* để kiểm tra 4 tầng (BIOS/ACPI, Driver NIC & EEE, Bền vững reboot/shutdown, Fast Startup & Boot), tự động sửa qua UAC (This PC), WinRM (Windows từ xa không rớt mạng), hoặc SSH + sudo offline (`SIOCETHTOOL` ioctl + khóa 3 lớp NetworkManager/systemd cho Linux), đồng bộ MAC PCIe và gửi gói Magic Packet hỗ trợ cả Supernet `/21`.
 - **Command Runner (Ctrl+3):** chọn máy, chọn PowerShell/WinRM hoặc SSH; nhập tài khoản, xem lại script rồi nhấn **Ctrl+Enter** để chạy ngay trên các đích đã chọn. Con trỏ tự động sẵn sàng tại ô nhập lệnh.
 - Khởi động lại/tắt máy dùng hộp thoại xác nhận của thao tác tương ứng.
 - Chuyển tab khi lệnh đang chạy không hủy tác vụ đã gửi đến máy đích, toàn bộ nội dung lệnh gõ dở và lịch sử output được bảo toàn trọn vẹn.
@@ -85,6 +86,8 @@ Phím theo tab chỉ áp dụng trong màn hình tương ứng; Ctrl+A/C/V trong
 ## Cài đặt và dữ liệu
 
 **Ctrl+,** mở Cài đặt gồm: Tinh chỉnh hiệu ứng kính (Glass Tuning), Cập nhật LAN (OTA Updates), Quản lý OUI nhà sản xuất MAC, Hướng dẫn sử dụng và About. Ngôn ngữ giao diện hỗ trợ Việt/Anh/Trung. F1 và User Guide trong app hiển thị cùng danh sách phím tắt và tài liệu hướng dẫn.
+
+Hệ thống tích hợp **Bộ tối ưu năng lượng 4 tầng (4-Tier Power Optimizer)** và **Chế độ ngủ rảnh tay (Idle Sleep Mode)**. Khi cửa sổ ứng dụng bị thu nhỏ, mất tiêu điểm hoặc không có thao tác chuột/phím sau một khoảng thời gian (mặc định 12 giây, tùy chỉnh trong tab Tinh chỉnh hiệu ứng), app sẽ tự động tạm dừng render loop và các hiệu ứng động Liquid Glass để giảm triệt để tải CPU & GPU cho máy trạm. Thao tác chuột hoặc gõ phím bất kỳ sẽ lập tức đánh thức giao diện với tốc độ phản hồi dưới 1 frame.
 
 Danh sách thiết bị và thông tin đăng nhập đã lưu nằm trong thư mục application support của Windows (`JA_Remote`). Các thông tin nhạy cảm (mật khẩu máy trạm, token và SMB credentials) được mã hóa tại chỗ bằng két bảo mật **Windows Data Protection API (DPAPI)**. Người dùng có thể thiết lập tài khoản đăng nhập ghi đè riêng cho từng thiết bị và chèn biến động `{{host}}`, `{{username}}`, `{{password}}` trong script kịch bản. Nhật ký tác vụ giữ tối đa 500 mục trong bộ nhớ của phiên hiện tại.
 

@@ -28,22 +28,9 @@ Future<void> initGlassWindow({
   try {
     await windowManager.ensureInitialized();
 
-    // Detect Windows 11 (Build >= 22000)
-    bool isWin11 = false;
-    if (Platform.isWindows) {
-      try {
-        final versionStr = Platform.operatingSystemVersion;
-        final match = RegExp(r'Build\s+(\d+)').firstMatch(versionStr);
-        if (match != null) {
-          final buildNumber = int.tryParse(match.group(1) ?? '') ?? 0;
-          isWin11 = buildNumber >= 22000;
-        }
-      } catch (_) {}
-    }
-
-    // Hide title on Windows 10 to eliminate GDI text bounding box artifact.
-    // Windows 11 supports native title bar composition with Acrylic.
-    final effectiveTitle = (Platform.isWindows && !isWin11) ? '' : title;
+    // Always set the application title so the window title bar, Taskbar,
+    // and Alt+Tab show the proper app name instead of the executable name.
+    final effectiveTitle = title;
 
     // Deliberately no titleBarStyle / backgroundColor here — window_manager is
     // only used for size/position/focus/close-prevention. Composition (blur,
@@ -60,14 +47,9 @@ Future<void> initGlassWindow({
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setTitle(effectiveTitle);
       await windowManager.show();
       await windowManager.focus();
-
-      if (Platform.isWindows) {
-        if (!isWin11) {
-          await windowManager.setTitle('');
-        }
-      }
     });
   } catch (e) {
     debugPrint('Window manager error: $e');

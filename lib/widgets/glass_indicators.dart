@@ -14,35 +14,52 @@ class _WaveIndicatorState extends State<WaveIndicator>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
-  )..repeat(reverse: true);
-
-  late final AppLifecycleListener _lifecycleListener;
+  );
 
   @override
   void initState() {
     super.initState();
-    // Stops the equalizer bars while the window is minimized/hidden,
-    // mirroring the Page Visibility low-power sleep mode added to
-    // UI_DESIGN_Sample.html (0% background CPU when document.hidden).
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (state) {
-        switch (state) {
-          case AppLifecycleState.hidden:
-          case AppLifecycleState.paused:
-            _controller.stop();
-          case AppLifecycleState.resumed:
-            _controller.repeat(reverse: true);
-          case AppLifecycleState.inactive:
-          case AppLifecycleState.detached:
-            break;
-        }
-      },
+    // Stops the equalizer bars while the window is unfocused or minimized/hidden
+    // via AppPowerManager (with direction preservation on resume).
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      _resumeAnimation();
+    }
+    AppPowerManager.instance.indicatorsAnimationNotifier.addListener(
+      _onPowerChanged,
     );
+  }
+
+  void _onPowerChanged() {
+    if (!mounted) return;
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      if (!_controller.isAnimating) {
+        _resumeAnimation();
+      }
+    } else {
+      if (_controller.isAnimating) {
+        _controller.stop();
+      }
+    }
+  }
+
+  void _resumeAnimation() {
+    final bool reverseFirst = _controller.status == AnimationStatus.reverse;
+    if (reverseFirst) {
+      _controller.reverse().then((_) {
+        if (mounted && AppPowerManager.instance.shouldAnimateIndicators) {
+          _controller.repeat(reverse: true);
+        }
+      });
+    } else {
+      _controller.repeat(reverse: true);
+    }
   }
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    AppPowerManager.instance.indicatorsAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
     _controller.dispose();
     super.dispose();
   }

@@ -17,6 +17,8 @@ import '../../core/network/network_utils.dart';
 import '../../widgets/glass_search_history_field.dart';
 import 'device_detail_dialog.dart';
 import 'add_device_dialog.dart';
+import 'ip_drift_scanner_dialog.dart';
+import 'wol_inspector_dialog.dart';
 
 class DevicesView extends StatefulWidget {
   final Function(int tabIndex)? onNavigateTab;
@@ -208,198 +210,257 @@ class _DevicesViewState extends State<DevicesView> {
         service.selectedGroup != 'All' ||
         service.statusFilter != 'All';
 
+    final searchField = GlassSearchHistoryField(
+      controller: _searchController,
+      focusNode: _searchFocus,
+      category: 'devices',
+      hintText: language.t('dev_search_hint'),
+      height: 36,
+      fontSize: 13,
+      hintFontSize: 12,
+      borderRadius: 8,
+      suffixBadge: service.searchQuery.trim().isNotEmpty
+          ? Container(
+              margin: const EdgeInsets.only(right: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: colors.accentCyan.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: colors.accentCyan.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Text(
+                '$filteredCount',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                  color: colors.accentCyan,
+                ),
+              ),
+            )
+          : null,
+      onChanged: (val) {
+        service.setSearchQuery(val);
+        setState(() {});
+      },
+      onSubmitted: (val) {
+        service.setSearchQuery(val);
+        setState(() {});
+      },
+      onClear: () {
+        service.setSearchQuery('');
+        setState(() {});
+      },
+    );
+
+    final groupDropdown = SizedBox(
+      width: 156,
+      child: GlassDropdown<String>(
+        colors: colors,
+        items: service.availableGroups.map((group) {
+          return GlassDropdownItem<String>(
+            value: group,
+            label: '${language.t('dev_group_prefix')}$group',
+            icon: Icons.folder_open_rounded,
+            accentColor: colors.accentCyan,
+          );
+        }).toList(),
+        value: service.selectedGroup,
+        hintText: 'Nhóm máy…',
+        enableSearch: service.availableGroups.length > 5,
+        borderRadius: 10,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        onChanged: (val) => service.setGroup(val),
+      ),
+    );
+
+    final countChip = Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: colors.cardBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isFiltered
+              ? colors.accentCyan.withValues(alpha: 0.4)
+              : colors.cardBorder,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isFiltered ? Icons.filter_alt_rounded : Icons.devices_rounded,
+            size: 14,
+            color: isFiltered ? colors.accentCyan : colors.textMuted,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isFiltered
+                ? language.t('dev_count_filtered', {
+                    'filtered': filteredCount.toString(),
+                    'total': totalCount.toString(),
+                  })
+                : language.t('dev_count_all', {
+                    'count': totalCount.toString(),
+                    'online': onlineCount.toString(),
+                  }),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: isFiltered ? FontWeight.bold : FontWeight.w500,
+              color: isFiltered ? colors.accentCyan : colors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final actionButtons = <Widget>[
+      // Auto Polling indicator / toggle
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        tooltip: service.isPolling
+            ? language.t('dev_tooltip_autoping_on')
+            : language.t('dev_tooltip_autoping_off'),
+        icon: Icon(
+          service.isPolling
+              ? Icons.autorenew_rounded
+              : Icons.pause_circle_outline_rounded,
+          color: service.isPolling ? colors.accentEmerald : colors.textMuted,
+        ),
+        onPressed: service.togglePolling,
+      ),
+
+      // Refresh ping button
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        tooltip: language.t('dev_tooltip_refresh'),
+        icon: Icon(Icons.refresh_rounded, color: colors.accentCyan),
+        onPressed: () {
+          service.refreshAllStatus();
+          showAppToast(
+            context,
+            colors: colors,
+            message: 'Đang kiểm tra kết nối các máy...',
+            icon: Icons.sync_rounded,
+          );
+        },
+      ),
+
+      // IP Drift & Conflict Scanner Button
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        tooltip: language.t('drift_scanner_title'),
+        icon: Icon(Icons.find_replace_rounded, color: colors.accentEmerald),
+        onPressed: () => showIpDriftScannerDialog(context),
+      ),
+
+      // Wake-on-LAN 4-Layer Inspector & Auto-Fix Button
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        tooltip: language.t('wol_inspector_title'),
+        icon: Icon(Icons.settings_power_rounded, color: colors.accentAmber),
+        onPressed: () => showWolInspectorDialog(context),
+      ),
+      const SizedBox(width: 4),
+
+      // Export Config Button
+      GlassButton(
+        label: language.t('dev_btn_export'),
+        icon: Icons.upload_file_rounded,
+        colors: colors,
+        accentColor: colors.accentAmber,
+        onTap: () => _handleExport(context, colors, language),
+      ),
+      const SizedBox(width: 6),
+
+      // Import Config Button
+      GlassButton(
+        label: language.t('dev_btn_import'),
+        icon: Icons.file_download_rounded,
+        colors: colors,
+        accentColor: colors.accentPurple,
+        onTap: () => _handleImport(context, service, colors, language),
+      ),
+      const SizedBox(width: 6),
+
+      // Add Device Button
+      GlassButton(
+        label: language.t('dev_btn_add'),
+        icon: Icons.add_rounded,
+        colors: colors,
+        accentColor: colors.accentCyan,
+        onTap: () => showAddDeviceDialog(context),
+      ),
+    ];
+
     return GlassCard(
       colors: colors,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        children: [
-          // Search box with history suggestions
-          Expanded(
-            flex: 3,
-            child: GlassSearchHistoryField(
-              controller: _searchController,
-              focusNode: _searchFocus,
-              category: 'devices',
-              hintText: language.t('dev_search_hint'),
-              height: 36,
-              fontSize: 13,
-              hintFontSize: 12,
-              borderRadius: 8,
-              suffixBadge: service.searchQuery.trim().isNotEmpty
-                  ? Container(
-                      margin: const EdgeInsets.only(right: 2),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.accentCyan.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: colors.accentCyan.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Text(
-                        '$filteredCount',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.bold,
-                          color: colors.accentCyan,
-                        ),
-                      ),
-                    )
-                  : null,
-              onChanged: (val) {
-                service.setSearchQuery(val);
-                setState(() {});
-              },
-              onSubmitted: (val) {
-                service.setSearchQuery(val);
-                setState(() {});
-              },
-              onClear: () {
-                service.setSearchQuery('');
-                setState(() {});
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-
-          // Group Filter Dropdown
-          SizedBox(
-            width: 170,
-            child: GlassDropdown<String>(
-              colors: colors,
-              items: service.availableGroups.map((group) {
-                return GlassDropdownItem<String>(
-                  value: group,
-                  label: '${language.t('dev_group_prefix')}$group',
-                  icon: Icons.folder_open_rounded,
-                  accentColor: colors.accentCyan,
-                );
-              }).toList(),
-              value: service.selectedGroup,
-              hintText: 'Nhóm máy…',
-              enableSearch: service.availableGroups.length > 5,
-              borderRadius: 10,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              onChanged: (val) => service.setGroup(val),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Status Filter Buttons (All, Online, Offline)
-          _buildStatusToggle(service, colors, language),
-          const SizedBox(width: 8),
-
-          // Count / Filter Indicator Chip
-          Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: colors.cardBg,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isFiltered
-                    ? colors.accentCyan.withValues(alpha: 0.4)
-                    : colors.cardBorder,
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= 1380) {
+            return Row(
               children: [
-                Icon(
-                  isFiltered ? Icons.filter_alt_rounded : Icons.devices_rounded,
-                  size: 14,
-                  color: isFiltered ? colors.accentCyan : colors.textMuted,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isFiltered
-                      ? language.t('dev_count_filtered', {
-                          'filtered': filteredCount.toString(),
-                          'total': totalCount.toString(),
-                        })
-                      : language.t('dev_count_all', {
-                          'count': totalCount.toString(),
-                          'online': onlineCount.toString(),
-                        }),
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: isFiltered ? FontWeight.bold : FontWeight.w500,
-                    color: isFiltered
-                        ? colors.accentCyan
-                        : colors.textSecondary,
-                  ),
-                ),
+                Expanded(flex: 3, child: searchField),
+                const SizedBox(width: 10),
+                groupDropdown,
+                const SizedBox(width: 8),
+                _buildStatusToggle(service, colors, language),
+                const SizedBox(width: 8),
+                countChip,
+                const Spacer(),
+                ...actionButtons,
               ],
-            ),
-          ),
-          const Spacer(),
+            );
+          }
 
-          // Auto Polling indicator / toggle
-          IconButton(
-            tooltip: service.isPolling
-                ? language.t('dev_tooltip_autoping_on')
-                : language.t('dev_tooltip_autoping_off'),
-            icon: Icon(
-              service.isPolling
-                  ? Icons.autorenew_rounded
-                  : Icons.pause_circle_outline_rounded,
-              color: service.isPolling
-                  ? colors.accentEmerald
-                  : colors.textMuted,
-            ),
-            onPressed: service.togglePolling,
-          ),
-
-          // Refresh ping button
-          IconButton(
-            tooltip: language.t('dev_tooltip_refresh'),
-            icon: Icon(Icons.refresh_rounded, color: colors.accentCyan),
-            onPressed: () {
-              service.refreshAllStatus();
-              showAppToast(
-                context,
-                colors: colors,
-                message: 'Đang kiểm tra kết nối các máy...',
-                icon: Icons.sync_rounded,
-              );
-            },
-          ),
-          const SizedBox(width: 6),
-
-          // Export Config Button
-          GlassButton(
-            label: language.t('dev_btn_export'),
-            icon: Icons.upload_file_rounded,
-            colors: colors,
-            accentColor: colors.accentAmber,
-            onTap: () => _handleExport(context, colors, language),
-          ),
-          const SizedBox(width: 6),
-
-          // Import Config Button
-          GlassButton(
-            label: language.t('dev_btn_import'),
-            icon: Icons.file_download_rounded,
-            colors: colors,
-            accentColor: colors.accentPurple,
-            onTap: () => _handleImport(context, service, colors, language),
-          ),
-          const SizedBox(width: 6),
-
-          // Add Device Button
-          GlassButton(
-            label: language.t('dev_btn_add'),
-            icon: Icons.add_rounded,
-            colors: colors,
-            accentColor: colors.accentCyan,
-            onTap: () => showAddDeviceDialog(context),
-          ),
-        ],
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: searchField),
+                  const SizedBox(width: 10),
+                  groupDropdown,
+                  const SizedBox(width: 8),
+                  _buildStatusToggle(service, colors, language),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  countChip,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: actionButtons,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -869,6 +930,19 @@ class _DevicesViewState extends State<DevicesView> {
                         );
                       }
                     },
+                  ),
+                  const SizedBox(width: 6),
+
+                  // Check / Fix WoL selected
+                  GlassButton(
+                    label: language.t('wol_btn_batch_check'),
+                    icon: Icons.settings_power_rounded,
+                    colors: colors,
+                    accentColor: colors.accentAmber,
+                    onTap: () => showWolInspectorDialog(
+                      context,
+                      initialDevices: service.selectedDevices,
+                    ),
                   ),
                   const SizedBox(width: 6),
 
@@ -1596,83 +1670,109 @@ class _DeviceRow extends StatelessWidget {
                             }
                           }
                           break;
+                        case 'wol_inspector':
+                          showWolInspectorDialog(
+                            context,
+                            initialDevices: [device],
+                          );
+                          break;
                         case 'details':
                           onShowDetail();
                           break;
                       }
                     },
-                    itemBuilder: (ctx) => [
-                      PopupMenuItem(
-                        value: 'copy_ip',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.copy_rounded,
-                              size: 14,
-                              color: colors.accentCyan,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Sao chép IP (${device.ip})',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'copy_host',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.dns_rounded,
-                              size: 14,
-                              color: colors.accentCyan,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Sao chép Hostname',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (device.mac != null && device.mac!.isNotEmpty)
+                    itemBuilder: (ctx) {
+                      final language = ctx.read<LanguageProvider>();
+                      return [
                         PopupMenuItem(
-                          value: 'copy_mac',
+                          value: 'copy_ip',
                           child: Row(
                             children: [
                               Icon(
-                                Icons.fingerprint_rounded,
+                                Icons.copy_rounded,
                                 size: 14,
                                 color: colors.accentCyan,
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Sao chép MAC',
+                                'Sao chép IP (${device.ip})',
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ],
                           ),
                         ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'details',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.edit_note_rounded,
-                              size: 15,
-                              color: colors.textPrimary,
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Chi tiết & Chỉnh sửa',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ],
+                        PopupMenuItem(
+                          value: 'copy_host',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.dns_rounded,
+                                size: 14,
+                                color: colors.accentCyan,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Sao chép Hostname',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        if (device.mac != null && device.mac!.isNotEmpty)
+                          PopupMenuItem(
+                            value: 'copy_mac',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.fingerprint_rounded,
+                                  size: 14,
+                                  color: colors.accentCyan,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Sao chép MAC',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        PopupMenuItem(
+                          value: 'wol_inspector',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.settings_power_rounded,
+                                size: 15,
+                                color: colors.accentAmber,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                language.t('wol_menu_inspect'),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        PopupMenuItem(
+                          value: 'details',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.edit_note_rounded,
+                                size: 15,
+                                color: colors.textPrimary,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Chi tiết & Chỉnh sửa',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ];
+                    },
                   ),
                 ],
               ),

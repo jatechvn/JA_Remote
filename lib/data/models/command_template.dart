@@ -130,6 +130,26 @@ class CommandTemplate {
         command: 'free -m',
         description: 'Xem mức RAM đang sử dụng và còn trống',
       ),
+      CommandTemplate(
+        id: 'win_wol_check',
+        name: 'Windows: Kiểm tra Wake-on-LAN (4 tầng)',
+        platform: 'windows',
+        type: 'powershell',
+        command:
+            r'Get-NetAdapterPowerManagement | Select-Object Name, WakeOnMagicPacket, WakeOnPattern; powercfg /devicequery wake_armed; (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name HiberbootEnabled -EA SilentlyContinue).HiberbootEnabled',
+        description:
+            'Kiểm tra nhanh card mạng, powercfg wake_armed và Fast Startup',
+      ),
+      CommandTemplate(
+        id: 'linux_wol_check',
+        name: 'Linux: Kiểm tra Wake-on-LAN',
+        platform: 'linux',
+        type: 'ssh',
+        command:
+            'grep . /sys/class/net/*/device/power/wakeup 2>/dev/null; nmcli -f NAME,802-3-ethernet.wake-on-lan connection show --active; grep -E "00:1c|01:00" /proc/acpi/wakeup 2>/dev/null',
+        description:
+            'Kiểm tra sysfs wakeup, NetworkManager và ACPI Wakeup cho cổng LAN',
+      ),
     ];
   }
 }

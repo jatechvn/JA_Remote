@@ -11,6 +11,7 @@ import '../../services/power_service.dart';
 import '../../services/tool_launcher_service.dart';
 import '../../core/network/port_scan_service.dart';
 import 'port_scanner_dialog.dart';
+import 'wol_inspector_dialog.dart';
 
 /// Glass dialog displaying full device details, fast action buttons, and edit options.
 void showDeviceDetailDialog(BuildContext context, ManagedDevice device) {
@@ -161,6 +162,17 @@ void showDeviceDetailDialog(BuildContext context, ManagedDevice device) {
                         );
                       }
                     },
+                  ),
+                  // Check & Fix WoL
+                  _ActionButton(
+                    label: language.t('wol_menu_inspect'),
+                    icon: Icons.settings_power_rounded,
+                    color: colors.accentAmber,
+                    colors: colors,
+                    onTap: () => showWolInspectorDialog(
+                      context,
+                      initialDevices: [device],
+                    ),
                   ),
                   // Restart
                   _ActionButton(

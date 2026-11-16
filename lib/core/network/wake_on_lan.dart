@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'network_utils.dart';
 
 /// Wake-on-LAN (WOL) implementation for waking PCs over LAN.
 class WakeOnLan {
@@ -39,33 +40,74 @@ class WakeOnLan {
   }
 
   /// Sends Wake-on-LAN Magic Packet via UDP broadcast.
+  ///
+  /// When [localBindIp] is supplied alongside a supernet-directed [broadcastIp]
+  /// (and optional [extraBroadcastIps]), an additional socket bound directly to
+  /// that physical LAN interface is used so virtual adapters cannot hijack
+  /// `255.255.255.255` broadcasts.
   static Future<bool> wake({
     required String mac,
     String broadcastIp = '255.255.255.255',
     int port = 9,
+    String? localBindIp,
+    Iterable<String> extraBroadcastIps = const [],
   }) async {
     try {
       final packet = createMagicPacket(mac);
-      final targetAddr = InternetAddress(broadcastIp);
+      final targets = <String>{};
+      final cleanPrimary = broadcastIp.trim();
+      if (NetworkUtils.isValidIp(cleanPrimary)) {
+        targets.add(cleanPrimary);
+      }
+      for (final extra in extraBroadcastIps) {
+        final cleanExtra = extra.trim();
+        if (NetworkUtils.isValidIp(cleanExtra)) {
+          targets.add(cleanExtra);
+        }
+      }
+      targets.add('255.255.255.255');
 
-      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-      socket.broadcastEnabled = true;
+      await _sendViaAddress(InternetAddress.anyIPv4, packet, targets, port);
 
-      // Send to primary port and fallback port (9 and 7)
-      socket.send(packet, targetAddr, port);
-      if (port != 7) {
-        socket.send(packet, targetAddr, 7);
+      final cleanBind = localBindIp?.trim();
+      if (cleanBind != null &&
+          cleanBind.isNotEmpty &&
+          cleanBind != '0.0.0.0' &&
+          NetworkUtils.isValidIp(cleanBind)) {
+        try {
+          await _sendViaAddress(
+            InternetAddress(cleanBind),
+            packet,
+            targets,
+            port,
+          );
+        } catch (_) {}
       }
 
-      // Also send to global broadcast 255.255.255.255 if directed broadcast was specified
-      if (broadcastIp != '255.255.255.255') {
-        socket.send(packet, InternetAddress('255.255.255.255'), port);
-      }
-
-      socket.close();
       return true;
     } catch (e) {
       return false;
+    }
+  }
+
+  static Future<void> _sendViaAddress(
+    InternetAddress bindAddr,
+    Uint8List packet,
+    Set<String> targets,
+    int port,
+  ) async {
+    final socket = await RawDatagramSocket.bind(bindAddr, 0);
+    try {
+      socket.broadcastEnabled = true;
+      for (final target in targets) {
+        final targetAddr = InternetAddress(target);
+        socket.send(packet, targetAddr, port);
+        if (port != 7) {
+          socket.send(packet, targetAddr, 7);
+        }
+      }
+    } finally {
+      socket.close();
     }
   }
 }

@@ -420,6 +420,26 @@ class LanguageProvider extends ChangeNotifier {
       "en": "Show used and available memory",
       "cn": "显示已用和可用内存",
     },
+    "template_win_wol_check_name": {
+      "vi": "Windows: Kiểm tra Wake-on-LAN (4 tầng)",
+      "en": "Windows: Wake-on-LAN 4-Layer Check",
+      "cn": "Windows：Wake-on-LAN 四层检查",
+    },
+    "template_win_wol_check_description": {
+      "vi": "Kiểm tra nhanh card mạng, powercfg wake_armed và Fast Startup",
+      "en": "Check NIC WoL properties, powercfg wake_armed and Fast Startup",
+      "cn": "快速检查网卡唤醒属性、powercfg wake_armed 与快速启动",
+    },
+    "template_linux_wol_check_name": {
+      "vi": "Linux: Kiểm tra Wake-on-LAN",
+      "en": "Linux: Wake-on-LAN Audit",
+      "cn": "Linux：Wake-on-LAN 检查",
+    },
+    "template_linux_wol_check_description": {
+      "vi": "Kiểm tra sysfs wakeup, NetworkManager và ACPI Wakeup cho cổng LAN",
+      "en": "Check sysfs wakeup, NetworkManager and ACPI Wakeup state",
+      "cn": "检查网卡 sysfs wakeup、NetworkManager 与 ACPI 唤醒状态",
+    },
     "dropdown_search": {
       "vi": "Tìm kiếm {count} mục…",
       "en": "Search {count} items…",
@@ -1406,9 +1426,9 @@ class LanguageProvider extends ChangeNotifier {
       'cn': '就绪待命。选择目标机台并点击“立即执行命令”，或在下方提示符处直接输入命令。',
     },
     'terminal_default_banner': {
-      'vi': 'JA Remote Command Console [Phiên bản 1.3.2]',
-      'en': 'JA Remote Command Console [Version 1.3.2]',
-      'cn': 'JA Remote 命令控制台 [版本 1.3.2]',
+      'vi': 'JA Remote Command Console [Phiên bản 1.4.0]',
+      'en': 'JA Remote Command Console [Version 1.4.0]',
+      'cn': 'JA Remote 命令控制台 [版本 1.4.0]',
     },
     'terminal_default_help_hint': {
       'vi': 'Gõ "help" để xem danh sách các lệnh chẩn đoán và hệ thống.',
@@ -2105,6 +2125,205 @@ class LanguageProvider extends ChangeNotifier {
       'vi': 'Phát hiện phiên bản mới: {version}',
       'en': 'New version available: {version}',
       'cn': '发现新版本: {version}',
+    },
+    'status_paused': {'vi': 'Tạm dừng', 'en': 'Paused', 'cn': '已暂停'},
+    'status_eco_sleep': {
+      'vi': 'ECO • SLEEP',
+      'en': 'ECO • SLEEP',
+      'cn': '节能休眠',
+    },
+    'status_eco_sleep_tooltip': {
+      'vi':
+          'Chế độ ngủ rảnh tay (0% GPU nền) — Di chuột hoặc gõ phím để thức dậy',
+      'en':
+          'Idle Sleep Mode active (0% background GPU) — Move mouse or press key to wake',
+      'cn': '空闲休眠已激活 (0% 后台 GPU) — 移动鼠标或按键唤醒',
+    },
+    'settings_idle_sleep_title': {
+      'vi': 'Tự động ngủ rảnh tay (Idle Sleep Mode)',
+      'en': 'Automatic Idle Sleep Mode',
+      'cn': '自动空闲休眠模式 (Idle Sleep)',
+    },
+    'settings_idle_sleep_desc': {
+      'vi':
+          'Tạm dừng hiệu ứng shader nền & chữ chạy khi không thao tác hoặc thu nhỏ cửa sổ để giảm GPU/CPU về ~0%',
+      'en':
+          'Pause background shaders & marquee when idle or unfocused/minimized to reduce GPU/CPU to ~0%',
+      'cn': '无操作或窗口失焦/最小化时暂停背景着色器与滚动文字，将 GPU/CPU 降至 ~0%',
+    },
+    'settings_idle_timeout_label': {
+      'vi': 'Thời gian chờ trước khi ngủ:',
+      'en': 'Idle timeout before sleep:',
+      'cn': '进入休眠前等待时间:',
+    },
+    'deploy_btn_select_failed': {
+      'vi': 'Chọn máy lỗi ({count})',
+      'en': 'Select Failed ({count})',
+      'cn': '选中失败机台 ({count})',
+    },
+    'deploy_toast_selected_failed': {
+      'vi': 'Đã chọn {count} máy lỗi để thao tác nhanh!',
+      'en': 'Selected {count} failed device(s) for quick actions!',
+      'cn': '已选中 {count} 台失败设备！',
+    },
+    'drift_scanner_btn_toolbar': {
+      'vi': 'Dò nhảy IP',
+      'en': 'IP Drift Audit',
+      'cn': 'IP漂移检测',
+    },
+    'drift_scanner_title': {
+      'vi':
+          'Quét Phát Hiện Nhảy IP & Xung Đột MAC (IP Drift & Conflict Auditor)',
+      'en': 'Smart IP Drift & MAC Conflict Auditor',
+      'cn': '智能 IP 漂移与 MAC 冲突检测器',
+    },
+    'drift_scanner_mode_paste': {
+      'vi': 'Dán danh sách Excel/Bảng (Hostname  IP  MAC)',
+      'en': 'Paste Excel/Table (Hostname  IP  MAC)',
+      'cn': '粘贴 Excel/表格 (主机名  IP  MAC)',
+    },
+    'drift_scanner_deep_sweep': {
+      'vi': 'Quét sâu toàn dải mạng + RDP/NetBIOS',
+      'en': 'Deep Subnet Sweep + RDP/NetBIOS',
+      'cn': '全网段深度扫描 + RDP/NetBIOS',
+    },
+    'drift_scanner_btn_start': {
+      'vi': 'Bắt đầu đối soát IP',
+      'en': 'Start IP Audit',
+      'cn': '开始对账扫描',
+    },
+    'drift_scanner_starting': {
+      'vi': 'Đang khởi tạo trình quét đối soát IP/MAC...',
+      'en': 'Initializing IP/MAC drift auditor...',
+      'cn': '正在初始化 IP/MAC 漂移扫描器...',
+    },
+    'drift_scanner_empty_paste': {
+      'vi': 'Vui lòng dán danh sách chứa ít nhất 1 dòng có địa chỉ IP hợp lệ!',
+      'en': 'Please paste a list containing at least 1 valid IP address!',
+      'cn': '请粘贴至少包含 1 个有效 IP 地址的列表！',
+    },
+    'drift_scanner_empty_devices': {
+      'vi': 'Chưa có thiết bị nào trong danh sách quản lý để kiểm tra!',
+      'en': 'No managed devices available to audit!',
+      'cn': '管理列表中暂无设备可供检测！',
+    },
+    'drift_scanner_idle_hint': {
+      'vi':
+          'Nhấn "Bắt đầu đối soát IP" để tự động phát hiện máy bị nhảy IP DHCP, xung đột MAC hoặc đổi tên máy\n(Kết hợp Ping + Bảng ARP + Chứng chỉ RDP cổng 3389 + NetBIOS cổng 137)',
+      'en':
+          'Click "Start IP Audit" to detect DHCP IP jumps, MAC conflicts, or renamed hosts\n(Combines ICMP Ping + ARP Table + TCP 3389 RDP X.509 Cert + UDP 137 NetBIOS)',
+      'cn':
+          '点击“开始对账扫描”自动检测 DHCP IP 漂移、MAC 冲突或主机重命名\n(结合 Ping + ARP 表 + TCP 3389 RDP 证书 + UDP 137 NetBIOS)',
+    },
+    'wol_inspector_title': {
+      'vi': 'Kiểm tra & Tối ưu Wake-on-LAN (4 Tầng)',
+      'en': 'Wake-on-LAN 4-Layer Auditor & Fixer',
+      'cn': 'Wake-on-LAN 四层检查与一键修复',
+    },
+    'wol_btn_toolbar': {
+      'vi': 'Check / Fix WoL',
+      'en': 'Check / Fix WoL',
+      'cn': '检查 / 修复 WoL',
+    },
+    'wol_btn_batch_check': {
+      'vi': 'Check / Fix WoL',
+      'en': 'Check / Fix WoL',
+      'cn': '检查 / 修复 WoL',
+    },
+    'wol_menu_inspect': {
+      'vi': 'Kiểm tra & Tối ưu WoL',
+      'en': 'Check & Fix WoL',
+      'cn': '检查并优化 WoL',
+    },
+    'wol_tab_managed': {
+      'vi': 'Máy quản lý',
+      'en': 'Managed Hosts',
+      'cn': '托管设备',
+    },
+    'wol_tab_local': {
+      'vi': 'Máy hiện tại (This PC)',
+      'en': 'This PC (Local)',
+      'cn': '本机 (This PC)',
+    },
+    'wol_tab_adhoc': {
+      'vi': 'Kiểm tra IP bất kỳ',
+      'en': 'Ad-hoc IP',
+      'cn': '自定义 IP 检查',
+    },
+    'wol_btn_check': {'vi': 'Kiểm tra WoL', 'en': 'Check WoL', 'cn': '检查 WoL'},
+    'wol_btn_fix': {
+      'vi': 'Tối ưu & Sửa WoL',
+      'en': 'Auto-Fix WoL',
+      'cn': '一键修复 WoL',
+    },
+    'wol_btn_fix_uac': {
+      'vi': 'Tối ưu bằng Admin (UAC)',
+      'en': 'Fix with Admin (UAC)',
+      'cn': '管理员优化 (UAC)',
+    },
+    'wol_btn_save_device': {
+      'vi': 'Lưu vào Thiết bị',
+      'en': 'Save to Devices',
+      'cn': '保存到设备列表',
+    },
+    'wol_btn_copy_tsv': {
+      'vi': 'Sao chép TSV',
+      'en': 'Copy TSV',
+      'cn': '复制 TSV',
+    },
+    'wol_btn_sync_mac': {
+      'vi': 'Cập nhật MAC',
+      'en': 'Sync MAC',
+      'cn': '同步 MAC',
+    },
+    'wol_btn_test_wake': {'vi': 'Bắn thử WoL', 'en': 'Test Wake', 'cn': '测试唤醒'},
+    'wol_empty_targets': {
+      'vi': 'Chưa có thiết bị nào để kiểm tra Wake-on-LAN!',
+      'en': 'No target devices available for Wake-on-LAN audit!',
+      'cn': '没有可用于 Wake-on-LAN 检查的目标设备！',
+    },
+    'wol_local_desc': {
+      'vi':
+          'Kiểm tra nhanh 4 tầng WoL trên máy này hoặc tự động tối ưu bằng quyền Administrator (UAC).',
+      'en':
+          'Audit 4-layer WoL readiness on This PC or auto-fix with Windows Administrator (UAC).',
+      'cn': '检查本机四层 WoL 就绪状态，或通过管理员 UAC 一键优化所有配置。',
+    },
+    'wol_idle_hint': {
+      'vi':
+          'Nhấn "Kiểm tra WoL" hoặc "Tối ưu & Sửa WoL" để kiểm tra đủ 4 tầng:\n1. BIOS / ACPI  •  2. Driver NIC & EEE  •  3. Bền vững Reboot/Shutdown  •  4. Fast Startup & Boot',
+      'en':
+          'Click "Check WoL" or "Auto-Fix WoL" to audit all 4 layers:\n1. BIOS / ACPI  •  2. NIC Driver & EEE  •  3. Reboot Persistence  •  4. Fast Startup & Boot',
+      'cn':
+          '点击“检查 WoL”或“一键修复 WoL”检查全部四层：\n1. BIOS / ACPI  •  2. 网卡驱动与 EEE  •  3. 重启持久性  •  4. 快速启动与引导',
+    },
+    'wol_filter_all': {'vi': 'Tất cả', 'en': 'All', 'cn': '全部'},
+    'wol_filter_fix': {'vi': 'Cần sửa', 'en': 'Needs Fix', 'cn': '需修复'},
+    'wol_filter_ready': {'vi': 'Sẵn sàng', 'en': 'Ready', 'cn': '已就绪'},
+    'wol_filter_error': {
+      'vi': 'Lỗi / Quyền',
+      'en': 'Offline / Auth',
+      'cn': '离线 / 权限',
+    },
+    'wol_layer_bios': {
+      'vi': '1. BIOS / ACPI',
+      'en': '1. BIOS / ACPI',
+      'cn': '1. BIOS / ACPI',
+    },
+    'wol_layer_driver': {
+      'vi': '2. Driver NIC',
+      'en': '2. NIC Driver',
+      'cn': '2. 网卡驱动',
+    },
+    'wol_layer_persistence': {
+      'vi': '3. Bền vững',
+      'en': '3. Persistence',
+      'cn': '3. 持久配置',
+    },
+    'wol_layer_power': {
+      'vi': '4. Nguồn & Boot',
+      'en': '4. Power & Boot',
+      'cn': '4. 电源与启动',
     },
   };
 }

@@ -1,5 +1,31 @@
 # CHANGELOG — JA Remote
 
+## [v1.4.0] - 2026-11-16
+
+### 🚀 Nâng cấp & Tính năng mới
+- **Bộ tối ưu năng lượng 4 tầng & Chế độ ngủ rảnh tay (4-Tier Power Optimizer & Idle Sleep Mode):**
+  - Tích hợp `AppPowerManager` và `PowerAwareWidgetsFlutterBinding` kiểm soát 4 mức hiệu năng (Active, Inactive, Unfocused, Hidden/Minimized).
+  - Tự động ngắt render loop và chuyển sang Idle Sleep Mode sau thời gian không tương tác (mặc định 12s, tùy chọn 30s/60s/Tắt), giúp giảm tải triệt để CPU/GPU trên máy trạm Windows Desktop.
+  - Bảo toàn hướng và trạng thái animation (direction-preserving pause/resume) trên các thành phần Liquid Glass (`MeshOrb`, `WaveIndicator`, `BorderBeam`); cơ chế `_sessionEpoch` chống ghost-timer trên marquee text.
+- **Trình chẩn đoán & Tối ưu Wake-on-LAN 4 tầng (4-Layer Wake-on-LAN Inspector & Auto-Fix):**
+  - Kiểm tra toàn diện 4 tầng: BIOS/ACPI (S3/S4/S5 wake flags), Driver NIC & EEE (Magic Packet, Energy Efficient Ethernet), Tính bền vững sau Reboot/Shutdown, và Fast Startup / Hybrid Sleep.
+  - Tự động khắc phục 1-click qua UAC (máy cục bộ), WinRM (máy Windows từ xa an toàn không rớt mạng), hoặc SSH + sudo offline (`SIOCETHTOOL` ioctl và khóa 3 lớp NetworkManager/systemd cho Linux).
+  - Hỗ trợ gửi gói Magic Packet trên cả Subnet tiêu chuẩn và Supernet `/21`.
+- **Trình rà soát lệch IP & Xung đột MAC (Smart IP Drift & MAC Conflict Auditor):**
+  - Tự động đối soát danh bạ thiết bị với mạng thực tế qua ICMP Ping, ARP cache, RDP X.509 Certificate Common Name (TCP 3389) và NetBIOS NBSTAT (UDP 137).
+  - Phát hiện máy trạm đổi IP (DHCP drift) hoặc xung đột MAC; hỗ trợ cập nhật IP mới vào danh bạ chỉ với 1 cú click.
+- **Đồng bộ tiêu đề cửa sổ Native Windows & Runner Metadata:**
+  - Hoàn thiện `win32_window.cpp` và `Runner.rc`, đảm bảo cửa sổ luôn mang tên chính quy `JA Remote - TE PC Manager` / `JA Remote` trên thanh Taskbar và khay Alt+Tab.
+- **Tái cấu trúc module giao diện Cài đặt (Settings Modularity Split):**
+  - Tách nhỏ `dashboard_shell_settings.dart` thành các `part` files độc lập (`dashboard_top_bar.dart`, `settings_glass_tuning_tab.dart`, `settings_ota_update_tab.dart`, `settings_ota_status_card.dart`, `settings_mac_oui_tab.dart`, `settings_user_guide_tab.dart`, `settings_about_tab.dart`).
+- **Hệ thống tài liệu điều hướng & Bản đồ kiến trúc (AI Navigation Map):**
+  - Bổ sung `docs/AI_CONTEXT.md` và các hướng dẫn thư mục `INDEX.md` cho toàn bộ dự án.
+
+### 📦 Phát hành
+- Đồng bộ version 1.4.0+8 trong `pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `config_sample.json`, `install.bat`, `build.bat`, `USERGUIDE.md`, `README.md`, `RELEASE_NOTES.md`.
+
+---
+
 ## [v1.3.2] - 2026-09-29
 
 ### 🚀 Nâng cấp & Tính năng mới
